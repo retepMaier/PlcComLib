@@ -1,0 +1,16 @@
+# Build output
+bin/
+obj/
+
+# VS/Rider
+.vs/
+.idea/
+*.user
+
+# Test results
+TestResults/
+coverage*/
+
+# NuGet
+*.nupkg
+packages/

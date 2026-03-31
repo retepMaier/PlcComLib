@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
@@ -37,11 +38,13 @@ public sealed class TcpPlcServer : IPlcConnection
         IMessageFramer? framer = null,
         ILogger<TcpPlcServer>? logger = null)
     {
-        _config = config ?? throw new ArgumentNullException(nameof(config));
+        _config   = config   ?? throw new ArgumentNullException(nameof(config));
         _registry = registry ?? throw new ArgumentNullException(nameof(registry));
-        _framer = framer ?? new LengthPrefixFramer();
-        _logger = logger;
+        _framer   = framer   ?? new LengthPrefixFramer();
+        _logger   = logger;
     }
+
+    // ── Lifecycle ─────────────────────────────────────────────────────────────
 
     public Task StartAsync(CancellationToken cancellationToken = default)
     {
@@ -69,23 +72,66 @@ public sealed class TcpPlcServer : IPlcConnection
         ConnectionStateChanged?.Invoke(this, new ConnectionStateChangedEventArgs(false, "Server stopped"));
     }
 
+    // ── Send (broadcast) ──────────────────────────────────────────────────────
+
+    /// <summary>Broadcasts a legacy untyped telegram to all connected clients.</summary>
     public async Task SendAsync(Telegram telegram, CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        var payload = TelegramSerializer.Serialize(telegram);
-        var framed = _framer.Frame(payload);
-        var tasks = _clients.Values.Select(c => c.SendAsync(framed, cancellationToken));
-        await Task.WhenAll(tasks);
+        var framed = _framer.Frame(TelegramSerializer.Serialize(telegram));
+        await Task.WhenAll(_clients.Values.Select(c => c.SendAsync(framed, cancellationToken)));
     }
 
+    /// <summary>Broadcasts a strongly-typed telegram to all connected clients.</summary>
+    public async Task SendAsync<T>(T telegram, CancellationToken cancellationToken = default)
+        where T : ITypedS7Telegram<T>
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        var framed = _framer.Frame(telegram.Serialize());
+        await Task.WhenAll(_clients.Values.Select(c => c.SendAsync(framed, cancellationToken)));
+    }
+
+    // ── Send (unicast) ────────────────────────────────────────────────────────
+
+    /// <summary>Sends a legacy untyped telegram to a specific client.</summary>
     public async Task SendToAsync(Guid clientId, Telegram telegram, CancellationToken cancellationToken = default)
     {
         if (!_clients.TryGetValue(clientId, out var ctx))
             throw new KeyNotFoundException($"Client {clientId} not found.");
-        var payload = TelegramSerializer.Serialize(telegram);
-        var framed = _framer.Frame(payload);
-        await ctx.SendAsync(framed, cancellationToken);
+        await ctx.SendAsync(_framer.Frame(TelegramSerializer.Serialize(telegram)), cancellationToken);
     }
+
+    /// <summary>Sends a strongly-typed telegram to a specific client.</summary>
+    public async Task SendToAsync<T>(Guid clientId, T telegram, CancellationToken cancellationToken = default)
+        where T : ITypedS7Telegram<T>
+    {
+        if (!_clients.TryGetValue(clientId, out var ctx))
+            throw new KeyNotFoundException($"Client {clientId} not found.");
+        await ctx.SendAsync(_framer.Frame(telegram.Serialize()), cancellationToken);
+    }
+
+    // ── Typed subscription ────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Subscribes to <see cref="TelegramReceived"/> and invokes <paramref name="handler"/>
+    /// whenever a payload whose MessageId matches <typeparamref name="T"/>.<c>MessageId</c> arrives.
+    /// Uses static abstract interface members — zero reflection.
+    /// </summary>
+    public IDisposable Subscribe<T>(Action<T> handler)
+        where T : ITypedS7Telegram<T>
+    {
+        EventHandler<TelegramReceivedEventArgs> listener = (_, e) =>
+        {
+            if (e.RawPayload.Length < 2) return;
+            if (BinaryPrimitives.ReadUInt16BigEndian(e.RawPayload) != T.MessageId) return;
+            try   { handler(T.Deserialize(e.RawPayload)); }
+            catch (Exception ex) { _logger?.LogWarning(ex, "Typed handler for {T} threw.", typeof(T).Name); }
+        };
+        TelegramReceived += listener;
+        return new Subscription(() => TelegramReceived -= listener);
+    }
+
+    // ── Accept / receive loops ────────────────────────────────────────────────
 
     private async Task AcceptLoopAsync(CancellationToken ct)
     {
@@ -105,7 +151,7 @@ public sealed class TcpPlcServer : IPlcConnection
 
     private async Task HandleClientAsync(ClientContext ctx, CancellationToken ct)
     {
-        var buffer = new byte[65536];
+        var buffer      = new byte[65536];
         var accumulated = new System.IO.MemoryStream();
         try
         {
@@ -142,24 +188,58 @@ public sealed class TcpPlcServer : IPlcConnection
 
     private void DispatchTelegram(byte[] payload, Guid clientId)
     {
-        foreach (var def in _registry.Definitions)
+        // 1. MessageId-based dispatch
+        if (payload.Length >= 2)
         {
-            if (def.TotalWireSize == payload.Length)
+            ushort msgId = BinaryPrimitives.ReadUInt16BigEndian(payload);
+            foreach (var def in _registry.Definitions)
             {
-                try
+                if (def.MessageId != 0 && def.MessageId == msgId)
                 {
-                    var telegram = TelegramSerializer.Deserialize(def, payload);
-                    TelegramReceived?.Invoke(this, new TelegramReceivedEventArgs(telegram));
+                    TryDeserializeAndFire(def, payload, clientId);
                     return;
-                }
-                catch (Exception ex)
-                {
-                    _logger?.LogWarning(ex, "Failed to deserialize telegram '{Id}' from client {ClientId}.", def.Id, clientId);
                 }
             }
         }
-        _logger?.LogWarning("No matching telegram definition for payload of {Length} bytes from client {ClientId}.", payload.Length, clientId);
+
+        // 2. Size-based fallback
+        foreach (var def in _registry.Definitions)
+        {
+            if (def.MessageId == 0 && def.TotalWireSize == payload.Length)
+            {
+                TryDeserializeAndFire(def, payload, clientId);
+                return;
+            }
+        }
+
+        _logger?.LogWarning(
+            "No matching telegram definition for payload of {Length} bytes from client {ClientId}.",
+            payload.Length, clientId);
     }
+
+    private void TryDeserializeAndFire(TelegramDefinition def, byte[] payload, Guid clientId)
+    {
+        try
+        {
+            var telegram = TelegramSerializer.Deserialize(def, payload);
+            TelegramReceived?.Invoke(this, new TelegramReceivedEventArgs(telegram, payload));
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "Failed to deserialize telegram '{Id}' from client {ClientId}.",
+                def.Id, clientId);
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        await StopAsync();
+        _cts?.Dispose();
+    }
+
+    // ── Inner types ───────────────────────────────────────────────────────────
 
     private sealed class ClientContext : IDisposable
     {
@@ -172,8 +252,8 @@ public sealed class TcpPlcServer : IPlcConnection
         public ClientContext(TcpClient client, Guid id)
         {
             _client = client;
-            Id = id;
-            Stream = client.GetStream();
+            Id      = id;
+            Stream  = client.GetStream();
         }
 
         public async Task SendAsync(byte[] data, CancellationToken ct)
@@ -190,11 +270,8 @@ public sealed class TcpPlcServer : IPlcConnection
         }
     }
 
-    public async ValueTask DisposeAsync()
+    private sealed class Subscription(Action unsubscribe) : IDisposable
     {
-        if (_disposed) return;
-        _disposed = true;
-        await StopAsync();
-        _cts?.Dispose();
+        public void Dispose() => unsubscribe();
     }
 }

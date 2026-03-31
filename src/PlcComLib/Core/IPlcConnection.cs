@@ -29,8 +29,15 @@ public interface IPlcConnection : IAsyncDisposable
 /// <summary>Event args for a received telegram.</summary>
 public sealed class TelegramReceivedEventArgs : EventArgs
 {
-    public TelegramReceivedEventArgs(Telegram telegram) => Telegram = telegram;
-    public Telegram Telegram { get; }
+    public TelegramReceivedEventArgs(Telegram telegram, byte[]? rawPayload = null)
+    {
+        Telegram   = telegram;
+        RawPayload = rawPayload ?? [];
+    }
+
+    public Telegram Telegram   { get; }
+    /// <summary>The raw wire bytes that produced this telegram (includes the MessageId header for typed telegrams).</summary>
+    public byte[]   RawPayload { get; }
 }
 
 /// <summary>Event args for a connection state change.</summary>
