@@ -11,7 +11,7 @@ A high-performance **.NET 10** communication library for bidirectional TCP/IP an
 - **`ITelegram` interface** – every typed telegram carries a `TelegramId`; only `ITelegram` types can be sent or subscribed to
 - **`Subscribe<T>` / `SendAsync<T>`** – strongly-typed send and receive using static abstract interface members (zero reflection)
 - **`UnknownTelegramReceived` event** – callback whenever a received payload cannot be matched to any registered telegram
-- **MessageId-based Dispatch** – every typed telegram carries a 2-byte big-endian TelegramId as the first wire bytes, eliminating size-collision ambiguity
+- **MessageId-based Dispatch** – every typed telegram carries a 2-byte big-endian MessageId as the first wire bytes, eliminating size-collision ambiguity
 - **Connection-Level Byte Order** – `WithByteOrder(ByteOrder.LittleEndian)` on the builder; byte order is a connection concern, not per-telegram
 - **Full S7 Data Type Support** – Bool, Byte/USInt, SInt, Word/UInt, Int, DWord/UDInt, DInt, LWord/ULInt, LInt, Real, LReal, Char, WChar, S7String, S7WString, Date, Time, TimeOfDay, DateAndTime, Raw
 - **Message Framing** – length-prefix (default) or fixed-length framers; plug in your own via `IMessageFramer`
@@ -53,7 +53,7 @@ The generator emits (among other members):
 | Member | Description |
 |--------|-------------|
 | `static ushort MessageId` | The compile-time constant from the attribute |
-| `ushort TelegramId` | Instance property — same value as `MessageId`; implements `ITelegram` |
+| `ushort TelegramId` | Instance property — same value as `MessageId` at runtime; fulfils the `ITelegram` interface (instance-level alias of `MessageId`) |
 | `static int WireSize` | 2 (header) + sum of all field wire sizes |
 | `static TelegramDefinition Definition` | Built lazily from the declared attributes (no JSON required) |
 | `byte[] Serialize(ByteOrder byteOrder = BigEndian)` | Inlined `BinaryPrimitives` calls — no boxing |
@@ -64,19 +64,18 @@ The generator emits (among other members):
 ## Siemens S7 Datablock Layout
 
 The following shows how the example `MachineStatus` telegram maps onto a Siemens S7 DB.
-The first two bytes are always the `TelegramId` header (not part of the DB itself — added by
-the TCP communication layer):
+The first two bytes are always the `TelegramId` (`MessageId`) — a `WORD` at `DBW0` in the datablock:
 
 ```
-Wire layout (22 bytes total):
+Wire layout (34 bytes total):
 ┌─────────────────────────────────────────────────────────────────────────┐
 │ Offset │ Size │ S7 Type │ DB variable        │ C# property               │
 ├────────┼──────┼─────────┼────────────────────┼───────────────────────────┤
-│   0    │  2   │  (header) TelegramId = 0x0001 (big-endian, not in DB)    │
-│   2    │  2   │  WORD   │ DB1.DBW0           │ MachineId  (ushort)        │
-│   4    │  4   │  REAL   │ DB1.DBD2           │ Speed      (float)         │
-│   8    │  4   │  REAL   │ DB1.DBD6           │ Temperature (float)        │
-│  12    │  22  │  STRING │ DB1.DBB10 (len=20) │ Label      (string)        │
+│   0    │  2   │  WORD   │ DB1.DBW0           │ TelegramId = 0x0001 (BE)  │
+│   2    │  2   │  WORD   │ DB1.DBW2           │ MachineId  (ushort)        │
+│   4    │  4   │  REAL   │ DB1.DBD4           │ Speed      (float)         │
+│   8    │  4   │  REAL   │ DB1.DBD8           │ Temperature (float)        │
+│  12    │  22  │  STRING │ DB1.DBB12 (len=20) │ Label      (string)        │
 │        │      │         │   [0]=max=20        │                           │
 │        │      │         │   [1]=actual length │                           │
 │        │      │         │   [2..21]=chars     │                           │
@@ -92,13 +91,15 @@ DATA_BLOCK DB1
   VERSION : 0.1
 
   STRUCT
-    MachineId   : WORD;      // DBW0  — matches [S7Word]
-    Speed       : REAL;      // DBD2  — matches [S7Real]
-    Temperature : REAL;      // DBD6  — matches [S7Real]
-    Label       : STRING[20];// DBB10 — matches [S7String(maxLength: 20)]
+    TelegramId  : WORD;      // DBW0  — matches [S7Telegram(messageId: 0x0001)]
+    MachineId   : WORD;      // DBW2  — matches [S7Word]
+    Speed       : REAL;      // DBD4  — matches [S7Real]
+    Temperature : REAL;      // DBD8  — matches [S7Real]
+    Label       : STRING[20];// DBB12 — matches [S7String(maxLength: 20)]
   END_STRUCT;
 
 BEGIN
+  TelegramId  := W#16#0001;
   MachineId   := W#16#0000;
   Speed       := 0.0;
   Temperature := 0.0;
@@ -106,13 +107,17 @@ BEGIN
 END_DATA_BLOCK
 ```
 
-> **Note:** The 2-byte `TelegramId` header is prepended by PlcComLib when sending and stripped when received — it is **not** part of the DB definition. Configure the PLC's PUT/GET or Open User Communication (OUC) to start reading/writing from `DB1.DBW0`.
-
 ---
 
-## TelegramId Explained
+## MessageId / TelegramId Explained
 
-Every telegram type declared with `[S7Telegram(messageId: 0x0001)]` carries a **TelegramId** — a 2-byte unsigned integer that uniquely identifies the telegram type on the wire.
+Every telegram type declared with `[S7Telegram(messageId: 0x0001)]` carries a **MessageId** — a 2-byte unsigned integer that uniquely identifies the telegram type on the wire.
+
+> **Two names, one value:** The same 2-byte identifier is accessible in two ways:
+> - **`MessageId`** — the `static` compile-time constant on the class (set via the `messageId` attribute parameter).
+> - **`TelegramId`** — the instance property from the `ITelegram` interface; always returns the same value as `MessageId` at runtime.
+>
+> On the **wire and in the S7 DB** it is the first 2 bytes / first `WORD` field (`DBW0`).
 
 ### Why it exists
 
@@ -143,7 +148,7 @@ public interface ITelegram
 
 Every source-generated telegram class implements `ITelegram` automatically. Only types that implement `ITelegram` (via `ITypedS7Telegram<T>`) can be passed to `SendAsync<T>` or `Subscribe<T>`. This is enforced at compile time.
 
-### Choosing TelegramId values
+### Choosing MessageId values
 
 - Use values `0x0001`–`0xFFFE`. `0x0000` is reserved for legacy size-based matching.
 - Keep IDs unique across your entire project. A global `TelegramIds.cs` enum or constants file is recommended:
