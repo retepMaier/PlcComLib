@@ -70,8 +70,7 @@ public sealed class UdpPlcClientBuilder
     ///   </item>
     /// </list>
     /// <para>
-    /// The 2-byte <c>TelegramId</c> header is always transmitted big-endian regardless
-    /// of this setting — only data fields are affected.
+    /// The 2-byte <c>TelegramId</c> header follows the same byte order as data fields.
     /// </para>
     /// </param>
     public UdpPlcClientBuilder WithByteOrder(ByteOrder byteOrder)

@@ -1,3 +1,4 @@
+using PlcComLib.DataTypes;
 using PlcComLib.Telegrams;
 
 namespace PlcComLib.Core;
@@ -64,10 +65,11 @@ public sealed class ConnectionStateChangedEventArgs : EventArgs
 /// </summary>
 public sealed class UnknownTelegramEventArgs : EventArgs
 {
-    public UnknownTelegramEventArgs(byte[] payload)
+    public UnknownTelegramEventArgs(byte[] payload, ByteOrder byteOrder = ByteOrder.BigEndian)
     {
         ArgumentNullException.ThrowIfNull(payload);
-        Payload = payload;
+        Payload   = payload;
+        ByteOrder = byteOrder;
     }
 
     /// <summary>
@@ -76,11 +78,18 @@ public sealed class UnknownTelegramEventArgs : EventArgs
     public byte[] Payload { get; }
 
     /// <summary>
-    /// The first two bytes of <see cref="Payload"/> interpreted as a big-endian <c>ushort</c>,
-    /// or <c>0</c> if the payload is shorter than 2 bytes.
+    /// The byte order used by the connection that received this payload.
+    /// </summary>
+    public ByteOrder ByteOrder { get; }
+
+    /// <summary>
+    /// The first two bytes of <see cref="Payload"/> interpreted as a <c>ushort</c>
+    /// using the connection's <see cref="ByteOrder"/>, or <c>0</c> if the payload is shorter than 2 bytes.
     /// </summary>
     public ushort CandidateTelegramId =>
         Payload.Length >= 2
-            ? (ushort)((Payload[0] << 8) | Payload[1])
+            ? (ByteOrder == ByteOrder.LittleEndian
+                ? System.Buffers.Binary.BinaryPrimitives.ReadUInt16LittleEndian(Payload)
+                : System.Buffers.Binary.BinaryPrimitives.ReadUInt16BigEndian(Payload))
             : (ushort)0;
 }

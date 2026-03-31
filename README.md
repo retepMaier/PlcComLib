@@ -11,7 +11,7 @@ A high-performance **.NET 10** communication library for bidirectional TCP/IP an
 - **`ITelegram` interface** – every typed telegram carries a `TelegramId`; only `ITelegram` types can be sent or subscribed to
 - **`Subscribe<T>` / `SendAsync<T>`** – strongly-typed send and receive using static abstract interface members (zero reflection)
 - **`UnknownTelegramReceived` event** – callback whenever a received payload cannot be matched to any registered telegram
-- **MessageId-based Dispatch** – every typed telegram carries a 2-byte big-endian MessageId as the first wire bytes, eliminating size-collision ambiguity
+- **MessageId-based Dispatch** – every typed telegram carries a 2-byte MessageId as the first wire bytes, eliminating size-collision ambiguity; byte order follows the connection setting
 - **Connection-Level Byte Order** – `WithByteOrder(ByteOrder.LittleEndian)` on the builder; byte order is a connection concern, not per-telegram
 - **Full S7 Data Type Support** – Bool, Byte/USInt, SInt, Word/UInt, Int, DWord/UDInt, DInt, LWord/ULInt, LInt, Real, LReal, Char, WChar, S7String, S7WString, Date, Time, TimeOfDay, DateAndTime, Raw
 - **Message Framing** – length-prefix (default) or fixed-length framers; plug in your own via `IMessageFramer`
@@ -71,7 +71,7 @@ Wire layout (34 bytes total):
 ┌─────────────────────────────────────────────────────────────────────────┐
 │ Offset │ Size │ S7 Type │ DB variable        │ C# property               │
 ├────────┼──────┼─────────┼────────────────────┼───────────────────────────┤
-│   0    │  2   │  WORD   │ DB1.DBW0           │ TelegramId = 0x0001 (BE)  │
+│   0    │  2   │  WORD   │ DB1.DBW0           │ TelegramId = 0x0001       │
 │   2    │  2   │  WORD   │ DB1.DBW2           │ MachineId  (ushort)        │
 │   4    │  4   │  REAL   │ DB1.DBD4           │ Speed      (float)         │
 │   8    │  4   │  REAL   │ DB1.DBD8           │ Temperature (float)        │
@@ -123,19 +123,19 @@ Every telegram type declared with `[S7Telegram(messageId: 0x0001)]` carries a **
 
 In a TCP stream, multiple different telegram types may flow between PLC and host. Without a type identifier, the receiver must guess which telegram arrived based only on payload size — which is fragile (two types can have the same size) and impossible when sizes change.
 
-The TelegramId solves this: it is **always the first two bytes of every payload**, written big-endian. The dispatcher reads those two bytes, looks up the registered definition, and hands the rest to the correct deserializer.
+The TelegramId solves this: it is **always the first two bytes of every payload**, serialised using the connection's byte order. The dispatcher reads those two bytes (respecting byte order), looks up the registered definition, and hands the rest to the correct deserializer.
 
 ### Wire format
 
 ```
 ┌──────────────────────┬──────────────────────────────────────┐
 │  TelegramId (2 bytes)│  Data fields (N bytes)               │
-│  big-endian always   │  byte order = connection setting     │
+│  byte order =        │  byte order = connection setting     │
+│  connection setting  │                                      │
 └──────────────────────┴──────────────────────────────────────┘
 ```
 
-- The TelegramId header is **always big-endian**, regardless of the connection's `ByteOrder` setting.
-- Only the data fields (Word, Int, Real, DWord, …) are affected by `ByteOrder`.
+- Both the TelegramId header and data fields (Word, Int, Real, DWord, …) use the connection's `ByteOrder` setting.
 
 ### ITelegram interface
 
@@ -462,7 +462,7 @@ await client.StartAsync();
 await client.SendAsync(new DeviceCommand { CommandCode = 1, Parameter = 3.14f, Execute = true });
 ```
 
-> **Note:** The 2-byte **TelegramId header is always big-endian** regardless of `ByteOrder`. Only the data fields (Word, Int, Real, …) are affected.
+> **Note:** Both the 2-byte **TelegramId header** and all data fields use the same `ByteOrder` set on the connection.
 
 ---
 
@@ -475,7 +475,7 @@ When a received payload's `TelegramId` or size does not match any registered def
 client.UnknownTelegramReceived += (sender, e) =>
 {
     // e.Payload          — raw bytes of the unrecognised message (framing stripped)
-    // e.CandidateTelegramId — first 2 bytes interpreted as big-endian ushort (0 if < 2 bytes)
+    // e.CandidateTelegramId — first 2 bytes interpreted as ushort using the connection's ByteOrder (0 if < 2 bytes)
 
     Console.WriteLine(
         $"Unrecognised telegram: {e.Payload.Length} bytes, " +
@@ -596,7 +596,7 @@ handled generically.
 | Property | Type | Description |
 |----------|------|-------------|
 | `Payload` | `byte[]` | Raw wire bytes of the unrecognised message (framing already stripped). |
-| `CandidateTelegramId` | `ushort` | First 2 bytes of `Payload` interpreted as a big-endian `ushort`; `0` if payload shorter than 2 bytes. Useful for diagnosing which telegram type was received but not registered. |
+| `CandidateTelegramId` | `ushort` | First 2 bytes of `Payload` interpreted as a `ushort` using the connection's `ByteOrder`; `0` if payload shorter than 2 bytes. Useful for diagnosing which telegram type was received but not registered. |
 
 ### `ByteOrder` enum (`PlcComLib.DataTypes`)
 

@@ -8,9 +8,10 @@ namespace PlcComLib.Telegrams;
 public interface ITelegram
 {
     /// <summary>
-    /// The 2-byte big-endian telegram identifier that is prepended to every
+    /// The 2-byte telegram identifier that is prepended to every
     /// serialised payload and used to dispatch incoming messages to the correct
-    /// handler.
+    /// handler. The byte order of this identifier on the wire follows the
+    /// connection's <c>ByteOrder</c> setting.
     /// </summary>
     ushort TelegramId { get; }
 }
