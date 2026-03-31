@@ -7,51 +7,38 @@ namespace PlcComLib.Tests.Telegrams;
 
 public class TelegramRegistryTests
 {
-    private static readonly string SampleJson = """
+    private static TelegramDefinition MakeDef(string id, ushort messageId = 0) =>
+        new()
         {
-          "Id": "MachineStatus",
-          "Name": "Machine Status Telegram",
-          "Fields": [
-            { "Name": "MachineId", "DataType": "Word" },
-            { "Name": "Speed", "DataType": "Real" },
-            { "Name": "Alarm", "DataType": "Bool" }
-          ]
-        }
-        """;
-
-    private static readonly string SampleArrayJson = """
-        [
-          {
-            "Id": "TelegramA",
-            "Name": "Telegram A",
-            "Fields": [ { "Name": "Value", "DataType": "Int" } ]
-          },
-          {
-            "Id": "TelegramB",
-            "Name": "Telegram B",
-            "Fields": [ { "Name": "Flag", "DataType": "Bool" } ]
-          }
-        ]
-        """;
+            Id        = id,
+            MessageId = messageId,
+            Fields    = [new TelegramField { Name = "Value", DataType = S7DataType.Word }],
+        };
 
     [Fact]
-    public void LoadFromJson_RegistersSingleDefinition()
+    public void Register_And_Get_ReturnsDefinition()
     {
         var registry = new TelegramRegistry();
-        registry.LoadFromJson(SampleJson);
-        registry.Definitions.Should().HaveCount(1);
-        var def = registry.Get("MachineStatus");
-        def.Fields.Should().HaveCount(3);
+        registry.Register(MakeDef("SensorData"));
+        var def = registry.Get("SensorData");
+        def.Id.Should().Be("SensorData");
     }
 
     [Fact]
-    public void LoadFromJson_RegistersArrayOfDefinitions()
+    public void Register_IsCaseInsensitive()
     {
         var registry = new TelegramRegistry();
-        registry.LoadFromJson(SampleArrayJson);
-        registry.Definitions.Should().HaveCount(2);
-        registry.Get("TelegramA").Should().NotBeNull();
-        registry.Get("TelegramB").Should().NotBeNull();
+        registry.Register(MakeDef("SensorData"));
+        registry.Get("sensordata").Id.Should().Be("SensorData");
+    }
+
+    [Fact]
+    public void Register_Overwrites_ExistingDefinition()
+    {
+        var registry = new TelegramRegistry();
+        registry.Register(MakeDef("Dup"));
+        registry.Register(new TelegramDefinition { Id = "Dup", MessageId = 0x0005, Fields = [] });
+        registry.Get("Dup").MessageId.Should().Be(0x0005);
     }
 
     [Fact]
@@ -79,23 +66,21 @@ public class TelegramRegistryTests
     }
 
     [Fact]
-    public void LoadFromDirectory_LoadsAllJsonFiles()
+    public void Definitions_ContainsAllRegistered()
     {
-        var dir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
-        Directory.CreateDirectory(dir);
-        try
-        {
-            File.WriteAllText(Path.Combine(dir, "t1.json"), SampleJson.Replace("MachineStatus", "TS1"));
-            File.WriteAllText(Path.Combine(dir, "t2.json"), """
-                { "Id": "TS2", "Name": "T2", "Fields": [] }
-                """);
-            var registry = new TelegramRegistry();
-            registry.LoadFromDirectory(dir);
-            registry.Definitions.Should().HaveCount(2);
-        }
-        finally
-        {
-            Directory.Delete(dir, true);
-        }
+        var registry = new TelegramRegistry();
+        registry.Register(MakeDef("A", 0x0001));
+        registry.Register(MakeDef("B", 0x0002));
+        registry.Definitions.Should().HaveCount(2);
+        registry.Definitions.Should().Contain(d => d.Id == "A");
+        registry.Definitions.Should().Contain(d => d.Id == "B");
+    }
+
+    [Fact]
+    public void Definition_Stores_MessageId()
+    {
+        var registry = new TelegramRegistry();
+        registry.Register(MakeDef("Typed", messageId: 0x00FF));
+        registry.Get("Typed").MessageId.Should().Be(0x00FF);
     }
 }

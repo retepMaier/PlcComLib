@@ -1,0 +1,11 @@
+/home/runner/work/PlcComLib/PlcComLib/src/PlcComLib.SourceGenerator/obj/Debug/netstandard2.0/PlcComLib.SourceGenerator.csproj.AssemblyReference.cache
+/home/runner/work/PlcComLib/PlcComLib/src/PlcComLib.SourceGenerator/obj/Debug/netstandard2.0/PlcComLib.SourceGenerator.GeneratedMSBuildEditorConfig.editorconfig
+/home/runner/work/PlcComLib/PlcComLib/src/PlcComLib.SourceGenerator/obj/Debug/netstandard2.0/PlcComLib.SourceGenerator.AssemblyInfoInputs.cache
+/home/runner/work/PlcComLib/PlcComLib/src/PlcComLib.SourceGenerator/obj/Debug/netstandard2.0/PlcComLib.SourceGenerator.AssemblyInfo.cs
+/home/runner/work/PlcComLib/PlcComLib/src/PlcComLib.SourceGenerator/obj/Debug/netstandard2.0/PlcComLib.SourceGenerator.csproj.CoreCompileInputs.cache
+/home/runner/work/PlcComLib/PlcComLib/src/PlcComLib.SourceGenerator/obj/Debug/netstandard2.0/PlcComLib.SourceGenerator.sourcelink.json
+/home/runner/work/PlcComLib/PlcComLib/src/PlcComLib.SourceGenerator/bin/Debug/netstandard2.0/PlcComLib.SourceGenerator.deps.json
+/home/runner/work/PlcComLib/PlcComLib/src/PlcComLib.SourceGenerator/bin/Debug/netstandard2.0/PlcComLib.SourceGenerator.dll
+/home/runner/work/PlcComLib/PlcComLib/src/PlcComLib.SourceGenerator/bin/Debug/netstandard2.0/PlcComLib.SourceGenerator.pdb
+/home/runner/work/PlcComLib/PlcComLib/src/PlcComLib.SourceGenerator/obj/Debug/netstandard2.0/PlcComLib.SourceGenerator.dll
+/home/runner/work/PlcComLib/PlcComLib/src/PlcComLib.SourceGenerator/obj/Debug/netstandard2.0/PlcComLib.SourceGenerator.pdb

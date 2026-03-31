@@ -1,8 +1,10 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/PlcComLib/PlcComLib.csproj" />
+    <Project Path="src/PlcComLib.SourceGenerator/PlcComLib.SourceGenerator.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/PlcComLib.Tests/PlcComLib.Tests.csproj" />
+    <Project Path="tests/PlcComLib.SourceGenerator.Tests/PlcComLib.SourceGenerator.Tests.csproj" />
   </Folder>
 </Solution>

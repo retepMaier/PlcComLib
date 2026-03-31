@@ -1,18 +1,18 @@
 {
   "version": 2,
-  "dgSpecHash": "eZp9r9gKmE4=",
+  "dgSpecHash": "y5sUkPKEJEA=",
   "success": true,
   "projectFilePath": "/home/runner/work/PlcComLib/PlcComLib/tests/PlcComLib.Tests/PlcComLib.Tests.csproj",
   "expectedPackageFiles": [
     "/tmp/codeql-scratch-cc9d8e91a49f8983/dbs/csharp/working/packages/coverlet.collector/6.0.0/coverlet.collector.6.0.0.nupkg.sha512",
     "/tmp/codeql-scratch-cc9d8e91a49f8983/dbs/csharp/working/packages/fluentassertions/6.12.0/fluentassertions.6.12.0.nupkg.sha512",
     "/tmp/codeql-scratch-cc9d8e91a49f8983/dbs/csharp/working/packages/microsoft.codecoverage/17.8.0/microsoft.codecoverage.17.8.0.nupkg.sha512",
-    "/tmp/codeql-scratch-cc9d8e91a49f8983/dbs/csharp/working/packages/microsoft.extensions.dependencyinjection/8.0.0/microsoft.extensions.dependencyinjection.8.0.0.nupkg.sha512",
-    "/tmp/codeql-scratch-cc9d8e91a49f8983/dbs/csharp/working/packages/microsoft.extensions.dependencyinjection.abstractions/8.0.0/microsoft.extensions.dependencyinjection.abstractions.8.0.0.nupkg.sha512",
-    "/tmp/codeql-scratch-cc9d8e91a49f8983/dbs/csharp/working/packages/microsoft.extensions.logging/8.0.0/microsoft.extensions.logging.8.0.0.nupkg.sha512",
-    "/tmp/codeql-scratch-cc9d8e91a49f8983/dbs/csharp/working/packages/microsoft.extensions.logging.abstractions/8.0.0/microsoft.extensions.logging.abstractions.8.0.0.nupkg.sha512",
-    "/tmp/codeql-scratch-cc9d8e91a49f8983/dbs/csharp/working/packages/microsoft.extensions.options/8.0.0/microsoft.extensions.options.8.0.0.nupkg.sha512",
-    "/tmp/codeql-scratch-cc9d8e91a49f8983/dbs/csharp/working/packages/microsoft.extensions.primitives/8.0.0/microsoft.extensions.primitives.8.0.0.nupkg.sha512",
+    "/tmp/codeql-scratch-cc9d8e91a49f8983/dbs/csharp/working/packages/microsoft.extensions.dependencyinjection/10.0.0/microsoft.extensions.dependencyinjection.10.0.0.nupkg.sha512",
+    "/tmp/codeql-scratch-cc9d8e91a49f8983/dbs/csharp/working/packages/microsoft.extensions.dependencyinjection.abstractions/10.0.0/microsoft.extensions.dependencyinjection.abstractions.10.0.0.nupkg.sha512",
+    "/tmp/codeql-scratch-cc9d8e91a49f8983/dbs/csharp/working/packages/microsoft.extensions.logging/10.0.0/microsoft.extensions.logging.10.0.0.nupkg.sha512",
+    "/tmp/codeql-scratch-cc9d8e91a49f8983/dbs/csharp/working/packages/microsoft.extensions.logging.abstractions/10.0.0/microsoft.extensions.logging.abstractions.10.0.0.nupkg.sha512",
+    "/tmp/codeql-scratch-cc9d8e91a49f8983/dbs/csharp/working/packages/microsoft.extensions.options/10.0.0/microsoft.extensions.options.10.0.0.nupkg.sha512",
+    "/tmp/codeql-scratch-cc9d8e91a49f8983/dbs/csharp/working/packages/microsoft.extensions.primitives/10.0.0/microsoft.extensions.primitives.10.0.0.nupkg.sha512",
     "/tmp/codeql-scratch-cc9d8e91a49f8983/dbs/csharp/working/packages/microsoft.net.test.sdk/17.8.0/microsoft.net.test.sdk.17.8.0.nupkg.sha512",
     "/tmp/codeql-scratch-cc9d8e91a49f8983/dbs/csharp/working/packages/microsoft.netcore.platforms/1.1.0/microsoft.netcore.platforms.1.1.0.nupkg.sha512",
     "/tmp/codeql-scratch-cc9d8e91a49f8983/dbs/csharp/working/packages/microsoft.netcore.targets/1.1.0/microsoft.netcore.targets.1.1.0.nupkg.sha512",
@@ -87,7 +87,6 @@
     "/tmp/codeql-scratch-cc9d8e91a49f8983/dbs/csharp/working/packages/system.security.cryptography.x509certificates/4.3.0/system.security.cryptography.x509certificates.4.3.0.nupkg.sha512",
     "/tmp/codeql-scratch-cc9d8e91a49f8983/dbs/csharp/working/packages/system.text.encoding/4.3.0/system.text.encoding.4.3.0.nupkg.sha512",
     "/tmp/codeql-scratch-cc9d8e91a49f8983/dbs/csharp/working/packages/system.text.encoding.extensions/4.3.0/system.text.encoding.extensions.4.3.0.nupkg.sha512",
-    "/tmp/codeql-scratch-cc9d8e91a49f8983/dbs/csharp/working/packages/system.text.json/8.0.5/system.text.json.8.0.5.nupkg.sha512",
     "/tmp/codeql-scratch-cc9d8e91a49f8983/dbs/csharp/working/packages/system.text.regularexpressions/4.3.0/system.text.regularexpressions.4.3.0.nupkg.sha512",
     "/tmp/codeql-scratch-cc9d8e91a49f8983/dbs/csharp/working/packages/system.threading/4.3.0/system.threading.4.3.0.nupkg.sha512",
     "/tmp/codeql-scratch-cc9d8e91a49f8983/dbs/csharp/working/packages/system.threading.tasks/4.3.0/system.threading.tasks.4.3.0.nupkg.sha512",
@@ -103,8 +102,33 @@
     "/tmp/codeql-scratch-cc9d8e91a49f8983/dbs/csharp/working/packages/xunit.extensibility.core/2.6.2/xunit.extensibility.core.2.6.2.nupkg.sha512",
     "/tmp/codeql-scratch-cc9d8e91a49f8983/dbs/csharp/working/packages/xunit.extensibility.execution/2.6.2/xunit.extensibility.execution.2.6.2.nupkg.sha512",
     "/tmp/codeql-scratch-cc9d8e91a49f8983/dbs/csharp/working/packages/xunit.runner.visualstudio/2.5.4/xunit.runner.visualstudio.2.5.4.nupkg.sha512",
-    "/tmp/codeql-scratch-cc9d8e91a49f8983/dbs/csharp/working/packages/microsoft.netcore.app.ref/8.0.25/microsoft.netcore.app.ref.8.0.25.nupkg.sha512",
-    "/tmp/codeql-scratch-cc9d8e91a49f8983/dbs/csharp/working/packages/microsoft.aspnetcore.app.ref/8.0.25/microsoft.aspnetcore.app.ref.8.0.25.nupkg.sha512"
+    "/tmp/codeql-scratch-cc9d8e91a49f8983/dbs/csharp/working/packages/microsoft.netcore.app.ref/10.0.5/microsoft.netcore.app.ref.10.0.5.nupkg.sha512",
+    "/tmp/codeql-scratch-cc9d8e91a49f8983/dbs/csharp/working/packages/microsoft.aspnetcore.app.ref/10.0.5/microsoft.aspnetcore.app.ref.10.0.5.nupkg.sha512"
   ],
-  "logs": []
+  "logs": [
+    {
+      "code": "NU1903",
+      "level": "Warning",
+      "message": "Package 'System.Net.Http' 4.3.0 has a known high severity vulnerability, https://github.com/advisories/GHSA-7jgj-8wvc-jh57",
+      "projectPath": "/home/runner/work/PlcComLib/PlcComLib/tests/PlcComLib.Tests/PlcComLib.Tests.csproj",
+      "warningLevel": 1,
+      "filePath": "/home/runner/work/PlcComLib/PlcComLib/tests/PlcComLib.Tests/PlcComLib.Tests.csproj",
+      "libraryId": "System.Net.Http",
+      "targetGraphs": [
+        "net10.0"
+      ]
+    },
+    {
+      "code": "NU1903",
+      "level": "Warning",
+      "message": "Package 'System.Text.RegularExpressions' 4.3.0 has a known high severity vulnerability, https://github.com/advisories/GHSA-cmhx-cq75-c4mj",
+      "projectPath": "/home/runner/work/PlcComLib/PlcComLib/tests/PlcComLib.Tests/PlcComLib.Tests.csproj",
+      "warningLevel": 1,
+      "filePath": "/home/runner/work/PlcComLib/PlcComLib/tests/PlcComLib.Tests/PlcComLib.Tests.csproj",
+      "libraryId": "System.Text.RegularExpressions",
+      "targetGraphs": [
+        "net10.0"
+      ]
+    }
+  ]
 }
