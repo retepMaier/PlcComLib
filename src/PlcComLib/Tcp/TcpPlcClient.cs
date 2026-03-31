@@ -18,6 +18,7 @@ public sealed class TcpPlcClient : IPlcConnection
     private readonly TelegramRegistry _registry;
     private readonly IMessageFramer _framer;
     private readonly ILogger<TcpPlcClient>? _logger;
+    private readonly DataTypes.ByteOrder _defaultByteOrder;
 
     private TcpClient? _client;
     private NetworkStream? _stream;

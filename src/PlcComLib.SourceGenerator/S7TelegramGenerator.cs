@@ -198,6 +198,11 @@ public sealed class S7TelegramGenerator : IIncrementalGenerator
         sb.AppendLine($"    public static int WireSize => {totalWireSize};");
         sb.AppendLine();
 
+        // ── ITelegram instance member ─────────────────────────────────────────
+        sb.AppendLine("    /// <summary>The telegram identifier — always the same as the static <see cref=\"MessageId\"/>.</summary>");
+        sb.AppendLine("    public ushort TelegramId => MessageId;");
+        sb.AppendLine();
+
         // ── Definition ────────────────────────────────────────────────────────
         sb.AppendLine("    private static readonly global::PlcComLib.Telegrams.TelegramDefinition _s7Definition = BuildS7Definition();");
         sb.AppendLine("    public static global::PlcComLib.Telegrams.TelegramDefinition Definition => _s7Definition;");
@@ -207,6 +212,7 @@ public sealed class S7TelegramGenerator : IIncrementalGenerator
         sb.AppendLine("        {");
         sb.AppendLine($"            Id = \"{info.ClassName}\",");
         sb.AppendLine($"            MessageId = 0x{info.MessageId:X4},");
+        sb.AppendLine($"            ByteOrder = global::PlcComLib.DataTypes.ByteOrder.{(le ? "LittleEndian" : "BigEndian")},");
         sb.AppendLine("            Fields =");
         sb.AppendLine("            [");
         sb.AppendLine("                new global::PlcComLib.Telegrams.TelegramField { Name = \"__MessageId\", DataType = global::PlcComLib.DataTypes.S7DataType.Word },");

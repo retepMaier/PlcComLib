@@ -16,7 +16,8 @@ public static class S7TypeConverter
         };
     }
 
-    public static byte[] Serialize(S7DataType dataType, object value, byte maxStringLength = 0)
+    public static byte[] Serialize(S7DataType dataType, object value, byte maxStringLength = 0,
+        ByteOrder byteOrder = ByteOrder.BigEndian)
     {
         if (dataType == S7DataType.S7String)
         {
@@ -42,17 +43,18 @@ public static class S7TypeConverter
         }
         int size = ByteSwapper.GetByteSize(dataType);
         var bytes = new byte[size];
-        ByteSwapper.Write(bytes, dataType, value);
+        ByteSwapper.Write(bytes, dataType, value, byteOrder);
         return bytes;
     }
 
-    public static object Deserialize(S7DataType dataType, ReadOnlySpan<byte> source)
+    public static object Deserialize(S7DataType dataType, ReadOnlySpan<byte> source,
+        ByteOrder byteOrder = ByteOrder.BigEndian)
     {
         if (dataType == S7DataType.S7String) return S7String.ReadFrom(source);
         if (dataType == S7DataType.S7WString) return S7WString.ReadFrom(source);
         if (dataType == S7DataType.Raw) return source.ToArray();
         if (dataType == S7DataType.DateAndTime) return DeserializeDateAndTime(source);
-        return ByteSwapper.Read(source, dataType);
+        return ByteSwapper.Read(source, dataType, byteOrder);
     }
 
     private static byte ToBcd(int value) => (byte)((value / 10 << 4) | (value % 10));
