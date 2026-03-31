@@ -1,0 +1,13 @@
+/home/runner/work/PlcComLib/PlcComLib/src/PlcComLib/bin/Debug/net8.0/PlcComLib.deps.json
+/home/runner/work/PlcComLib/PlcComLib/src/PlcComLib/bin/Debug/net8.0/PlcComLib.dll
+/home/runner/work/PlcComLib/PlcComLib/src/PlcComLib/bin/Debug/net8.0/PlcComLib.pdb
+/home/runner/work/PlcComLib/PlcComLib/src/PlcComLib/obj/Debug/net8.0/PlcComLib.csproj.AssemblyReference.cache
+/home/runner/work/PlcComLib/PlcComLib/src/PlcComLib/obj/Debug/net8.0/PlcComLib.GeneratedMSBuildEditorConfig.editorconfig
+/home/runner/work/PlcComLib/PlcComLib/src/PlcComLib/obj/Debug/net8.0/PlcComLib.AssemblyInfoInputs.cache
+/home/runner/work/PlcComLib/PlcComLib/src/PlcComLib/obj/Debug/net8.0/PlcComLib.AssemblyInfo.cs
+/home/runner/work/PlcComLib/PlcComLib/src/PlcComLib/obj/Debug/net8.0/PlcComLib.csproj.CoreCompileInputs.cache
+/home/runner/work/PlcComLib/PlcComLib/src/PlcComLib/obj/Debug/net8.0/PlcComLib.sourcelink.json
+/home/runner/work/PlcComLib/PlcComLib/src/PlcComLib/obj/Debug/net8.0/PlcComLib.dll
+/home/runner/work/PlcComLib/PlcComLib/src/PlcComLib/obj/Debug/net8.0/refint/PlcComLib.dll
+/home/runner/work/PlcComLib/PlcComLib/src/PlcComLib/obj/Debug/net8.0/PlcComLib.pdb
+/home/runner/work/PlcComLib/PlcComLib/src/PlcComLib/obj/Debug/net8.0/ref/PlcComLib.dll

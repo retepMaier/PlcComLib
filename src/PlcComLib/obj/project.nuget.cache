@@ -1,0 +1,14 @@
+{
+  "version": 2,
+  "dgSpecHash": "pTkwsQGPJ+E=",
+  "success": true,
+  "projectFilePath": "/home/runner/work/PlcComLib/PlcComLib/src/PlcComLib/PlcComLib.csproj",
+  "expectedPackageFiles": [
+    "/tmp/codeql-scratch-cc9d8e91a49f8983/dbs/csharp/working/packages/microsoft.extensions.dependencyinjection.abstractions/8.0.0/microsoft.extensions.dependencyinjection.abstractions.8.0.0.nupkg.sha512",
+    "/tmp/codeql-scratch-cc9d8e91a49f8983/dbs/csharp/working/packages/microsoft.extensions.logging.abstractions/8.0.0/microsoft.extensions.logging.abstractions.8.0.0.nupkg.sha512",
+    "/tmp/codeql-scratch-cc9d8e91a49f8983/dbs/csharp/working/packages/system.text.json/8.0.5/system.text.json.8.0.5.nupkg.sha512",
+    "/tmp/codeql-scratch-cc9d8e91a49f8983/dbs/csharp/working/packages/microsoft.netcore.app.ref/8.0.25/microsoft.netcore.app.ref.8.0.25.nupkg.sha512",
+    "/tmp/codeql-scratch-cc9d8e91a49f8983/dbs/csharp/working/packages/microsoft.aspnetcore.app.ref/8.0.25/microsoft.aspnetcore.app.ref.8.0.25.nupkg.sha512"
+  ],
+  "logs": []
+}
