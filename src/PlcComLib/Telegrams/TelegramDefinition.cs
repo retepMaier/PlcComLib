@@ -2,6 +2,8 @@ namespace PlcComLib.Telegrams;
 
 /// <summary>
 /// Defines a telegram: its identity, optional description, and ordered list of fields.
+/// The byte order for multi-byte fields is determined by the client/server connection
+/// configuration (<c>WithByteOrder()</c>) — not by the definition itself.
 /// </summary>
 public sealed class TelegramDefinition
 {
@@ -11,9 +13,20 @@ public sealed class TelegramDefinition
 
     /// <summary>
     /// 2-byte big-endian MessageId used for typed-telegram dispatch.
-    /// <c>0</c> means not set (legacy untyped definitions still work).
+    /// <c>0</c> means not set (legacy untyped definitions still work via size-based matching).
+    /// Always transmitted big-endian as the first two bytes of every serialised payload.
     /// </summary>
     public ushort MessageId { get; set; }
+
+    /// <summary>
+    /// Alias for <see cref="MessageId"/>. The unique 2-byte identifier that identifies
+    /// this telegram type on the wire.
+    /// </summary>
+    public ushort TelegramId
+    {
+        get => MessageId;
+        set => MessageId = value;
+    }
 
     public List<TelegramField> Fields { get; set; } = [];
     public int TotalWireSize => Fields.Sum(f => f.WireSize);

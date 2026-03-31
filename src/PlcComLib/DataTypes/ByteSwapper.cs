@@ -51,8 +51,10 @@ public static class ByteSwapper
         return BitConverter.UInt64BitsToDouble(bits);
     }
 
-    public static void Write(Span<byte> destination, S7DataType dataType, object value)
+    public static void Write(Span<byte> destination, S7DataType dataType, object value,
+        ByteOrder byteOrder = ByteOrder.BigEndian)
     {
+        bool le = byteOrder == ByteOrder.LittleEndian;
         switch (dataType)
         {
             case S7DataType.Bool:
@@ -68,44 +70,61 @@ public static class ByteSwapper
                 break;
             case S7DataType.Word:
             case S7DataType.UInt:
-                BinaryPrimitives.WriteUInt16BigEndian(destination, Convert.ToUInt16(value));
+                if (le) BinaryPrimitives.WriteUInt16LittleEndian(destination, Convert.ToUInt16(value));
+                else    BinaryPrimitives.WriteUInt16BigEndian(destination, Convert.ToUInt16(value));
                 break;
             case S7DataType.Int:
             case S7DataType.Date:
-                BinaryPrimitives.WriteInt16BigEndian(destination, Convert.ToInt16(value));
+                if (le) BinaryPrimitives.WriteInt16LittleEndian(destination, Convert.ToInt16(value));
+                else    BinaryPrimitives.WriteInt16BigEndian(destination, Convert.ToInt16(value));
                 break;
             case S7DataType.WChar:
-                BinaryPrimitives.WriteUInt16BigEndian(destination, (ushort)Convert.ToChar(value));
+                if (le) BinaryPrimitives.WriteUInt16LittleEndian(destination, (ushort)Convert.ToChar(value));
+                else    BinaryPrimitives.WriteUInt16BigEndian(destination, (ushort)Convert.ToChar(value));
                 break;
             case S7DataType.DWord:
             case S7DataType.UDInt:
             case S7DataType.TimeOfDay:
-                BinaryPrimitives.WriteUInt32BigEndian(destination, Convert.ToUInt32(value));
+                if (le) BinaryPrimitives.WriteUInt32LittleEndian(destination, Convert.ToUInt32(value));
+                else    BinaryPrimitives.WriteUInt32BigEndian(destination, Convert.ToUInt32(value));
                 break;
             case S7DataType.DInt:
             case S7DataType.Time:
-                BinaryPrimitives.WriteInt32BigEndian(destination, Convert.ToInt32(value));
+                if (le) BinaryPrimitives.WriteInt32LittleEndian(destination, Convert.ToInt32(value));
+                else    BinaryPrimitives.WriteInt32BigEndian(destination, Convert.ToInt32(value));
                 break;
             case S7DataType.Real:
-                WriteReal(destination, Convert.ToSingle(value));
+                if (le)
+                    BinaryPrimitives.WriteUInt32LittleEndian(destination,
+                        BitConverter.SingleToUInt32Bits(Convert.ToSingle(value)));
+                else
+                    WriteReal(destination, Convert.ToSingle(value));
                 break;
             case S7DataType.LWord:
             case S7DataType.ULInt:
-                BinaryPrimitives.WriteUInt64BigEndian(destination, Convert.ToUInt64(value));
+                if (le) BinaryPrimitives.WriteUInt64LittleEndian(destination, Convert.ToUInt64(value));
+                else    BinaryPrimitives.WriteUInt64BigEndian(destination, Convert.ToUInt64(value));
                 break;
             case S7DataType.LInt:
-                BinaryPrimitives.WriteInt64BigEndian(destination, Convert.ToInt64(value));
+                if (le) BinaryPrimitives.WriteInt64LittleEndian(destination, Convert.ToInt64(value));
+                else    BinaryPrimitives.WriteInt64BigEndian(destination, Convert.ToInt64(value));
                 break;
             case S7DataType.LReal:
-                WriteLReal(destination, Convert.ToDouble(value));
+                if (le)
+                    BinaryPrimitives.WriteUInt64LittleEndian(destination,
+                        BitConverter.DoubleToUInt64Bits(Convert.ToDouble(value)));
+                else
+                    WriteLReal(destination, Convert.ToDouble(value));
                 break;
             default:
                 throw new NotSupportedException($"Use the dedicated S7String/DateAndTime writer for {dataType}.");
         }
     }
 
-    public static object Read(ReadOnlySpan<byte> source, S7DataType dataType)
+    public static object Read(ReadOnlySpan<byte> source, S7DataType dataType,
+        ByteOrder byteOrder = ByteOrder.BigEndian)
     {
+        bool le = byteOrder == ByteOrder.LittleEndian;
         return dataType switch
         {
             S7DataType.Bool   => source[0] != 0,
@@ -113,21 +132,25 @@ public static class ByteSwapper
             S7DataType.USInt  => source[0],
             S7DataType.SInt   => (sbyte)source[0],
             S7DataType.Char   => (char)source[0],
-            S7DataType.Word   => BinaryPrimitives.ReadUInt16BigEndian(source),
-            S7DataType.UInt   => BinaryPrimitives.ReadUInt16BigEndian(source),
-            S7DataType.Int    => BinaryPrimitives.ReadInt16BigEndian(source),
-            S7DataType.Date   => BinaryPrimitives.ReadInt16BigEndian(source),
-            S7DataType.WChar  => (char)BinaryPrimitives.ReadUInt16BigEndian(source),
-            S7DataType.DWord  => BinaryPrimitives.ReadUInt32BigEndian(source),
-            S7DataType.UDInt  => BinaryPrimitives.ReadUInt32BigEndian(source),
-            S7DataType.TimeOfDay => BinaryPrimitives.ReadUInt32BigEndian(source),
-            S7DataType.DInt   => BinaryPrimitives.ReadInt32BigEndian(source),
-            S7DataType.Time   => BinaryPrimitives.ReadInt32BigEndian(source),
-            S7DataType.Real   => ReadReal(source),
-            S7DataType.LWord  => BinaryPrimitives.ReadUInt64BigEndian(source),
-            S7DataType.ULInt  => BinaryPrimitives.ReadUInt64BigEndian(source),
-            S7DataType.LInt   => BinaryPrimitives.ReadInt64BigEndian(source),
-            S7DataType.LReal  => ReadLReal(source),
+            S7DataType.Word   => le ? BinaryPrimitives.ReadUInt16LittleEndian(source) : BinaryPrimitives.ReadUInt16BigEndian(source),
+            S7DataType.UInt   => le ? BinaryPrimitives.ReadUInt16LittleEndian(source) : BinaryPrimitives.ReadUInt16BigEndian(source),
+            S7DataType.Int    => le ? BinaryPrimitives.ReadInt16LittleEndian(source)  : BinaryPrimitives.ReadInt16BigEndian(source),
+            S7DataType.Date   => le ? BinaryPrimitives.ReadInt16LittleEndian(source)  : BinaryPrimitives.ReadInt16BigEndian(source),
+            S7DataType.WChar  => le ? (char)BinaryPrimitives.ReadUInt16LittleEndian(source) : (char)BinaryPrimitives.ReadUInt16BigEndian(source),
+            S7DataType.DWord  => le ? BinaryPrimitives.ReadUInt32LittleEndian(source) : BinaryPrimitives.ReadUInt32BigEndian(source),
+            S7DataType.UDInt  => le ? BinaryPrimitives.ReadUInt32LittleEndian(source) : BinaryPrimitives.ReadUInt32BigEndian(source),
+            S7DataType.TimeOfDay => le ? BinaryPrimitives.ReadUInt32LittleEndian(source) : BinaryPrimitives.ReadUInt32BigEndian(source),
+            S7DataType.DInt   => le ? BinaryPrimitives.ReadInt32LittleEndian(source)  : BinaryPrimitives.ReadInt32BigEndian(source),
+            S7DataType.Time   => le ? BinaryPrimitives.ReadInt32LittleEndian(source)  : BinaryPrimitives.ReadInt32BigEndian(source),
+            S7DataType.Real   => le
+                ? BitConverter.UInt32BitsToSingle(BinaryPrimitives.ReadUInt32LittleEndian(source))
+                : ReadReal(source),
+            S7DataType.LWord  => le ? BinaryPrimitives.ReadUInt64LittleEndian(source) : BinaryPrimitives.ReadUInt64BigEndian(source),
+            S7DataType.ULInt  => le ? BinaryPrimitives.ReadUInt64LittleEndian(source) : BinaryPrimitives.ReadUInt64BigEndian(source),
+            S7DataType.LInt   => le ? BinaryPrimitives.ReadInt64LittleEndian(source)  : BinaryPrimitives.ReadInt64BigEndian(source),
+            S7DataType.LReal  => le
+                ? BitConverter.UInt64BitsToDouble(BinaryPrimitives.ReadUInt64LittleEndian(source))
+                : ReadLReal(source),
             _ => throw new NotSupportedException($"Use the dedicated S7String/DateAndTime reader for {dataType}.")
         };
     }

@@ -65,13 +65,10 @@ public sealed class S7TelegramGenerator : IIncrementalGenerator
         if (telegramAttr is null) return null;
 
         ushort messageId = 0;
-        bool littleEndian = false;
 
         var args = telegramAttr.ConstructorArguments;
         if (args.Length >= 1 && args[0].Value is not null)
             messageId = (ushort)System.Convert.ToUInt32(args[0].Value);
-        if (args.Length >= 2 && args[1].Value is not null)
-            littleEndian = System.Convert.ToInt32(args[1].Value) == 1;
 
         var fields = new List<FieldInfo>();
         foreach (var member in cls.Members.OfType<PropertyDeclarationSyntax>())
@@ -88,7 +85,7 @@ public sealed class S7TelegramGenerator : IIncrementalGenerator
             : symbol.ContainingNamespace.ToDisplayString();
 
         return new TelegramClassInfo(
-            symbol.Name, ns, messageId, littleEndian,
+            symbol.Name, ns, messageId,
             fields.ToImmutableArray());
     }
 
@@ -173,9 +170,6 @@ public sealed class S7TelegramGenerator : IIncrementalGenerator
 
     private static string GenerateCode(TelegramClassInfo info)
     {
-        bool le = info.LittleEndian;
-        string endian = le ? "LittleEndian" : "BigEndian";
-
         int totalWireSize = 2; // MessageId header (always big-endian, 2 bytes)
         foreach (var f in info.Fields) totalWireSize += f.WireSize;
 
@@ -196,6 +190,11 @@ public sealed class S7TelegramGenerator : IIncrementalGenerator
         // ── static members ────────────────────────────────────────────────────
         sb.AppendLine($"    public static ushort MessageId => 0x{info.MessageId:X4};");
         sb.AppendLine($"    public static int WireSize => {totalWireSize};");
+        sb.AppendLine();
+
+        // ── ITelegram instance member ─────────────────────────────────────────
+        sb.AppendLine("    /// <summary>The telegram identifier — always the same as the static <see cref=\"MessageId\"/>.</summary>");
+        sb.AppendLine("    public ushort TelegramId => MessageId;");
         sb.AppendLine();
 
         // ── Definition ────────────────────────────────────────────────────────
@@ -224,24 +223,28 @@ public sealed class S7TelegramGenerator : IIncrementalGenerator
         sb.AppendLine();
 
         // ── Serialize ─────────────────────────────────────────────────────────
-        sb.AppendLine("    public byte[] Serialize()");
+        // byte order is supplied by the caller (the connection); MessageId is always big-endian.
+        sb.AppendLine("    public byte[] Serialize(global::PlcComLib.DataTypes.ByteOrder byteOrder = global::PlcComLib.DataTypes.ByteOrder.BigEndian)");
         sb.AppendLine("    {");
+        sb.AppendLine("        bool __le = byteOrder == global::PlcComLib.DataTypes.ByteOrder.LittleEndian;");
         sb.AppendLine($"        var __buf = new byte[WireSize];");
         // MessageId is always big-endian (protocol header, not data field)
         sb.AppendLine("        global::System.Buffers.Binary.BinaryPrimitives.WriteUInt16BigEndian(__buf.AsSpan(0), MessageId);");
         int offset = 2;
         foreach (var f in info.Fields)
         {
-            EmitSerialize(sb, f, offset, le, endian);
+            EmitSerialize(sb, f, offset);
             offset += f.WireSize;
         }
         sb.AppendLine("        return __buf;");
         sb.AppendLine("    }");
         sb.AppendLine();
 
-        // ── Deserialize(ReadOnlySpan<byte>) ───────────────────────────────────
-        sb.AppendLine($"    public static {info.ClassName} Deserialize(global::System.ReadOnlySpan<byte> data)");
+        // ── Deserialize(ReadOnlySpan<byte>, ByteOrder) ────────────────────────
+        sb.AppendLine($"    public static {info.ClassName} Deserialize(global::System.ReadOnlySpan<byte> data,");
+        sb.AppendLine("        global::PlcComLib.DataTypes.ByteOrder byteOrder = global::PlcComLib.DataTypes.ByteOrder.BigEndian)");
         sb.AppendLine("    {");
+        sb.AppendLine("        bool __le = byteOrder == global::PlcComLib.DataTypes.ByteOrder.LittleEndian;");
         sb.AppendLine("        if (data.Length < WireSize)");
         sb.AppendLine($"            throw new global::System.ArgumentException($\"Buffer too short: expected {{WireSize}} bytes, got {{data.Length}}.\");");
         sb.AppendLine("        ushort __id = global::System.Buffers.Binary.BinaryPrimitives.ReadUInt16BigEndian(data);");
@@ -251,7 +254,7 @@ public sealed class S7TelegramGenerator : IIncrementalGenerator
         offset = 2;
         foreach (var f in info.Fields)
         {
-            EmitDeserialize(sb, f, offset, le, endian);
+            EmitDeserialize(sb, f, offset);
             offset += f.WireSize;
         }
         sb.AppendLine("        return __r;");
@@ -259,13 +262,13 @@ public sealed class S7TelegramGenerator : IIncrementalGenerator
         sb.AppendLine();
 
         // ── Explicit interface implementation ────────────────────────────────
-        sb.AppendLine("    byte[] global::PlcComLib.Telegrams.ITypedS7Telegram<" + info.ClassName + ">.Serialize() => Serialize();");
+        sb.AppendLine("    byte[] global::PlcComLib.Telegrams.ITypedS7Telegram<" + info.ClassName + ">.Serialize(global::PlcComLib.DataTypes.ByteOrder byteOrder) => Serialize(byteOrder);");
         sb.AppendLine("}");
 
         return sb.ToString();
     }
 
-    private static void EmitSerialize(StringBuilder sb, FieldInfo f, int offset, bool le, string endian)
+    private static void EmitSerialize(StringBuilder sb, FieldInfo f, int offset)
     {
         switch (f.Kind)
         {
@@ -282,37 +285,31 @@ public sealed class S7TelegramGenerator : IIncrementalGenerator
                 sb.AppendLine($"        __buf[{offset}] = (byte){f.Name};");
                 break;
             case S7Kind.Word:
-                sb.AppendLine($"        global::System.Buffers.Binary.BinaryPrimitives.WriteUInt16{endian}(__buf.AsSpan({offset}), {f.Name});");
+                sb.AppendLine($"        if (__le) global::System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(__buf.AsSpan({offset}), {f.Name}); else global::System.Buffers.Binary.BinaryPrimitives.WriteUInt16BigEndian(__buf.AsSpan({offset}), {f.Name});");
                 break;
             case S7Kind.Int:
-                sb.AppendLine($"        global::System.Buffers.Binary.BinaryPrimitives.WriteInt16{endian}(__buf.AsSpan({offset}), {f.Name});");
+                sb.AppendLine($"        if (__le) global::System.Buffers.Binary.BinaryPrimitives.WriteInt16LittleEndian(__buf.AsSpan({offset}), {f.Name}); else global::System.Buffers.Binary.BinaryPrimitives.WriteInt16BigEndian(__buf.AsSpan({offset}), {f.Name});");
                 break;
             case S7Kind.WChar:
-                sb.AppendLine($"        global::System.Buffers.Binary.BinaryPrimitives.WriteUInt16{endian}(__buf.AsSpan({offset}), (ushort){f.Name});");
+                sb.AppendLine($"        if (__le) global::System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(__buf.AsSpan({offset}), (ushort){f.Name}); else global::System.Buffers.Binary.BinaryPrimitives.WriteUInt16BigEndian(__buf.AsSpan({offset}), (ushort){f.Name});");
                 break;
             case S7Kind.DWord:
-                sb.AppendLine($"        global::System.Buffers.Binary.BinaryPrimitives.WriteUInt32{endian}(__buf.AsSpan({offset}), {f.Name});");
+                sb.AppendLine($"        if (__le) global::System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(__buf.AsSpan({offset}), {f.Name}); else global::System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(__buf.AsSpan({offset}), {f.Name});");
                 break;
             case S7Kind.DInt:
-                sb.AppendLine($"        global::System.Buffers.Binary.BinaryPrimitives.WriteInt32{endian}(__buf.AsSpan({offset}), {f.Name});");
-                break;
-            case S7Kind.Real when le:
-                sb.AppendLine($"        global::System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(__buf.AsSpan({offset}), global::System.BitConverter.SingleToUInt32Bits({f.Name}));");
+                sb.AppendLine($"        if (__le) global::System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(__buf.AsSpan({offset}), {f.Name}); else global::System.Buffers.Binary.BinaryPrimitives.WriteInt32BigEndian(__buf.AsSpan({offset}), {f.Name});");
                 break;
             case S7Kind.Real:
-                sb.AppendLine($"        global::PlcComLib.DataTypes.ByteSwapper.WriteReal(__buf.AsSpan({offset}), {f.Name});");
+                sb.AppendLine($"        if (__le) global::System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(__buf.AsSpan({offset}), global::System.BitConverter.SingleToUInt32Bits({f.Name})); else global::PlcComLib.DataTypes.ByteSwapper.WriteReal(__buf.AsSpan({offset}), {f.Name});");
                 break;
             case S7Kind.LWord:
-                sb.AppendLine($"        global::System.Buffers.Binary.BinaryPrimitives.WriteUInt64{endian}(__buf.AsSpan({offset}), {f.Name});");
+                sb.AppendLine($"        if (__le) global::System.Buffers.Binary.BinaryPrimitives.WriteUInt64LittleEndian(__buf.AsSpan({offset}), {f.Name}); else global::System.Buffers.Binary.BinaryPrimitives.WriteUInt64BigEndian(__buf.AsSpan({offset}), {f.Name});");
                 break;
             case S7Kind.LInt:
-                sb.AppendLine($"        global::System.Buffers.Binary.BinaryPrimitives.WriteInt64{endian}(__buf.AsSpan({offset}), {f.Name});");
-                break;
-            case S7Kind.LReal when le:
-                sb.AppendLine($"        global::System.Buffers.Binary.BinaryPrimitives.WriteUInt64LittleEndian(__buf.AsSpan({offset}), global::System.BitConverter.DoubleToUInt64Bits({f.Name}));");
+                sb.AppendLine($"        if (__le) global::System.Buffers.Binary.BinaryPrimitives.WriteInt64LittleEndian(__buf.AsSpan({offset}), {f.Name}); else global::System.Buffers.Binary.BinaryPrimitives.WriteInt64BigEndian(__buf.AsSpan({offset}), {f.Name});");
                 break;
             case S7Kind.LReal:
-                sb.AppendLine($"        global::PlcComLib.DataTypes.ByteSwapper.WriteLReal(__buf.AsSpan({offset}), {f.Name});");
+                sb.AppendLine($"        if (__le) global::System.Buffers.Binary.BinaryPrimitives.WriteUInt64LittleEndian(__buf.AsSpan({offset}), global::System.BitConverter.DoubleToUInt64Bits({f.Name})); else global::PlcComLib.DataTypes.ByteSwapper.WriteLReal(__buf.AsSpan({offset}), {f.Name});");
                 break;
             case S7Kind.DateAndTime:
                 sb.AppendLine($"        {{ var __dt = global::PlcComLib.DataTypes.S7TypeConverter.Serialize(global::PlcComLib.DataTypes.S7DataType.DateAndTime, {f.Name}); __dt.CopyTo(__buf, {offset}); }}");
@@ -329,7 +326,7 @@ public sealed class S7TelegramGenerator : IIncrementalGenerator
         }
     }
 
-    private static void EmitDeserialize(StringBuilder sb, FieldInfo f, int offset, bool le, string endian)
+    private static void EmitDeserialize(StringBuilder sb, FieldInfo f, int offset)
     {
         switch (f.Kind)
         {
@@ -346,37 +343,31 @@ public sealed class S7TelegramGenerator : IIncrementalGenerator
                 sb.AppendLine($"        __r.{f.Name} = (char)data[{offset}];");
                 break;
             case S7Kind.Word:
-                sb.AppendLine($"        __r.{f.Name} = global::System.Buffers.Binary.BinaryPrimitives.ReadUInt16{endian}(data.Slice({offset}, 2));");
+                sb.AppendLine($"        __r.{f.Name} = __le ? global::System.Buffers.Binary.BinaryPrimitives.ReadUInt16LittleEndian(data.Slice({offset}, 2)) : global::System.Buffers.Binary.BinaryPrimitives.ReadUInt16BigEndian(data.Slice({offset}, 2));");
                 break;
             case S7Kind.Int:
-                sb.AppendLine($"        __r.{f.Name} = global::System.Buffers.Binary.BinaryPrimitives.ReadInt16{endian}(data.Slice({offset}, 2));");
+                sb.AppendLine($"        __r.{f.Name} = __le ? global::System.Buffers.Binary.BinaryPrimitives.ReadInt16LittleEndian(data.Slice({offset}, 2)) : global::System.Buffers.Binary.BinaryPrimitives.ReadInt16BigEndian(data.Slice({offset}, 2));");
                 break;
             case S7Kind.WChar:
-                sb.AppendLine($"        __r.{f.Name} = (char)global::System.Buffers.Binary.BinaryPrimitives.ReadUInt16{endian}(data.Slice({offset}, 2));");
+                sb.AppendLine($"        __r.{f.Name} = __le ? (char)global::System.Buffers.Binary.BinaryPrimitives.ReadUInt16LittleEndian(data.Slice({offset}, 2)) : (char)global::System.Buffers.Binary.BinaryPrimitives.ReadUInt16BigEndian(data.Slice({offset}, 2));");
                 break;
             case S7Kind.DWord:
-                sb.AppendLine($"        __r.{f.Name} = global::System.Buffers.Binary.BinaryPrimitives.ReadUInt32{endian}(data.Slice({offset}, 4));");
+                sb.AppendLine($"        __r.{f.Name} = __le ? global::System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(data.Slice({offset}, 4)) : global::System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(data.Slice({offset}, 4));");
                 break;
             case S7Kind.DInt:
-                sb.AppendLine($"        __r.{f.Name} = global::System.Buffers.Binary.BinaryPrimitives.ReadInt32{endian}(data.Slice({offset}, 4));");
-                break;
-            case S7Kind.Real when le:
-                sb.AppendLine($"        __r.{f.Name} = global::System.BitConverter.UInt32BitsToSingle(global::System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(data.Slice({offset}, 4)));");
+                sb.AppendLine($"        __r.{f.Name} = __le ? global::System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(data.Slice({offset}, 4)) : global::System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(data.Slice({offset}, 4));");
                 break;
             case S7Kind.Real:
-                sb.AppendLine($"        __r.{f.Name} = global::PlcComLib.DataTypes.ByteSwapper.ReadReal(data.Slice({offset}, 4));");
+                sb.AppendLine($"        __r.{f.Name} = __le ? global::System.BitConverter.UInt32BitsToSingle(global::System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(data.Slice({offset}, 4))) : global::PlcComLib.DataTypes.ByteSwapper.ReadReal(data.Slice({offset}, 4));");
                 break;
             case S7Kind.LWord:
-                sb.AppendLine($"        __r.{f.Name} = global::System.Buffers.Binary.BinaryPrimitives.ReadUInt64{endian}(data.Slice({offset}, 8));");
+                sb.AppendLine($"        __r.{f.Name} = __le ? global::System.Buffers.Binary.BinaryPrimitives.ReadUInt64LittleEndian(data.Slice({offset}, 8)) : global::System.Buffers.Binary.BinaryPrimitives.ReadUInt64BigEndian(data.Slice({offset}, 8));");
                 break;
             case S7Kind.LInt:
-                sb.AppendLine($"        __r.{f.Name} = global::System.Buffers.Binary.BinaryPrimitives.ReadInt64{endian}(data.Slice({offset}, 8));");
-                break;
-            case S7Kind.LReal when le:
-                sb.AppendLine($"        __r.{f.Name} = global::System.BitConverter.UInt64BitsToDouble(global::System.Buffers.Binary.BinaryPrimitives.ReadUInt64LittleEndian(data.Slice({offset}, 8)));");
+                sb.AppendLine($"        __r.{f.Name} = __le ? global::System.Buffers.Binary.BinaryPrimitives.ReadInt64LittleEndian(data.Slice({offset}, 8)) : global::System.Buffers.Binary.BinaryPrimitives.ReadInt64BigEndian(data.Slice({offset}, 8));");
                 break;
             case S7Kind.LReal:
-                sb.AppendLine($"        __r.{f.Name} = global::PlcComLib.DataTypes.ByteSwapper.ReadLReal(data.Slice({offset}, 8));");
+                sb.AppendLine($"        __r.{f.Name} = __le ? global::System.BitConverter.UInt64BitsToDouble(global::System.Buffers.Binary.BinaryPrimitives.ReadUInt64LittleEndian(data.Slice({offset}, 8))) : global::PlcComLib.DataTypes.ByteSwapper.ReadLReal(data.Slice({offset}, 8));");
                 break;
             case S7Kind.DateAndTime:
                 sb.AppendLine($"        __r.{f.Name} = (global::System.DateTime)global::PlcComLib.DataTypes.S7TypeConverter.Deserialize(global::PlcComLib.DataTypes.S7DataType.DateAndTime, data.Slice({offset}, 8));");
@@ -419,7 +410,6 @@ public sealed class S7TelegramGenerator : IIncrementalGenerator
         string ClassName,
         string? Namespace,
         ushort MessageId,
-        bool LittleEndian,
         ImmutableArray<FieldInfo> Fields)
     {
         public string HintName =>
@@ -437,28 +427,20 @@ public sealed class S7TelegramGenerator : IIncrementalGenerator
 
         namespace PlcComLib.SourceGenerator;
 
-        /// <summary>Specifies the byte order used when serialising a typed telegram.</summary>
-        public enum ByteOrder
-        {
-            /// <summary>Big-endian (Siemens S7 PLC wire format). This is the default.</summary>
-            BigEndian = 0,
-            /// <summary>Little-endian (Windows/Linux devices, non-S7 targets).</summary>
-            LittleEndian = 1,
-        }
-
         /// <summary>Marks a <c>partial</c> class as a strongly-typed S7 telegram.</summary>
         [System.AttributeUsage(System.AttributeTargets.Class)]
         public sealed class S7TelegramAttribute : System.Attribute
         {
-            /// <param name="messageId">Unique 2-byte identifier prepended to every serialised payload.</param>
-            /// <param name="byteOrder">Byte order for data fields (MessageId is always big-endian).</param>
-            public S7TelegramAttribute(ushort messageId, ByteOrder byteOrder = ByteOrder.BigEndian)
+            /// <param name="messageId">
+            /// Unique 2-byte identifier prepended to every serialised payload (always big-endian).
+            /// The byte order for data fields is configured on the client/server connection via
+            /// <c>WithByteOrder()</c>.
+            /// </param>
+            public S7TelegramAttribute(ushort messageId)
             {
                 MessageId = messageId;
-                ByteOrder = byteOrder;
             }
             public ushort MessageId { get; }
-            public ByteOrder ByteOrder { get; }
         }
 
         [System.AttributeUsage(System.AttributeTargets.Property)] public sealed class S7BoolAttribute     : System.Attribute { }
