@@ -66,7 +66,8 @@ public sealed class UnknownTelegramEventArgs : EventArgs
 {
     public UnknownTelegramEventArgs(byte[] payload)
     {
-        Payload = payload ?? [];
+        ArgumentNullException.ThrowIfNull(payload);
+        Payload = payload;
     }
 
     /// <summary>

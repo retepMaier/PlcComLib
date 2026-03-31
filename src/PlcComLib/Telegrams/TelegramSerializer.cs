@@ -3,16 +3,16 @@ using PlcComLib.DataTypes;
 namespace PlcComLib.Telegrams;
 
 /// <summary>
-/// Serialises and deserialises Telegram instances to/from their S7 wire representation.
-/// The byte order used for multi-byte fields is taken from <see cref="TelegramDefinition.ByteOrder"/>.
+/// Serialises and deserialises <see cref="Telegram"/> instances to/from their wire representation.
+/// The byte order for multi-byte fields is supplied by the caller (typically the client or server).
 /// </summary>
 public static class TelegramSerializer
 {
-    public static byte[] Serialize(Telegram telegram)
+    public static byte[] Serialize(Telegram telegram,
+        ByteOrder byteOrder = ByteOrder.BigEndian)
     {
         ArgumentNullException.ThrowIfNull(telegram);
         var def = telegram.Definition;
-        var byteOrder = def.ByteOrder;
         int totalSize = def.TotalWireSize;
         var buffer = new byte[totalSize];
         int offset = 0;
@@ -26,10 +26,10 @@ public static class TelegramSerializer
         return buffer;
     }
 
-    public static Telegram Deserialize(TelegramDefinition definition, ReadOnlySpan<byte> data)
+    public static Telegram Deserialize(TelegramDefinition definition, ReadOnlySpan<byte> data,
+        ByteOrder byteOrder = ByteOrder.BigEndian)
     {
         ArgumentNullException.ThrowIfNull(definition);
-        var byteOrder = definition.ByteOrder;
         var telegram = new Telegram(definition);
         int offset = 0;
         foreach (var field in definition.Fields)

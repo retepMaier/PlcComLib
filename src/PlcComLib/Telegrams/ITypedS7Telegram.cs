@@ -1,3 +1,5 @@
+using PlcComLib.DataTypes;
+
 namespace PlcComLib.Telegrams;
 
 /// <summary>
@@ -18,9 +20,24 @@ public interface ITypedS7Telegram<TSelf> : ITelegram where TSelf : ITypedS7Teleg
     /// <summary>The telegram definition built from the declared attributes (no JSON required).</summary>
     static abstract TelegramDefinition Definition { get; }
 
-    /// <summary>Deserialises a telegram from a raw wire payload. Validates MessageId and buffer length.</summary>
-    static abstract TSelf Deserialize(ReadOnlySpan<byte> data);
+    /// <summary>
+    /// Deserialises a telegram from a raw wire payload.
+    /// Validates MessageId and buffer length.
+    /// </summary>
+    /// <param name="data">Raw wire bytes (including the 2-byte MessageId header).</param>
+    /// <param name="byteOrder">
+    /// Byte order for multi-byte data fields. Supplied by the client/server connection.
+    /// The MessageId header is always read big-endian regardless of this setting.
+    /// </param>
+    static abstract TSelf Deserialize(ReadOnlySpan<byte> data,
+        ByteOrder byteOrder = ByteOrder.BigEndian);
 
-    /// <summary>Serialises this telegram to its wire payload.</summary>
-    byte[] Serialize();
+    /// <summary>
+    /// Serialises this telegram to its wire payload.
+    /// </summary>
+    /// <param name="byteOrder">
+    /// Byte order for multi-byte data fields. Supplied by the client/server connection.
+    /// The MessageId header is always written big-endian regardless of this setting.
+    /// </param>
+    byte[] Serialize(ByteOrder byteOrder = ByteOrder.BigEndian);
 }

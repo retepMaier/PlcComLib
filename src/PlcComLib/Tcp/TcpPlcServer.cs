@@ -4,6 +4,7 @@ using System.Net;
 using System.Net.Sockets;
 using Microsoft.Extensions.Logging;
 using PlcComLib.Core;
+using PlcComLib.DataTypes;
 using PlcComLib.Framing;
 using PlcComLib.Telegrams;
 
@@ -19,6 +20,7 @@ public sealed class TcpPlcServer : IPlcConnection
     private readonly TelegramRegistry _registry;
     private readonly IMessageFramer _framer;
     private readonly ILogger<TcpPlcServer>? _logger;
+    private readonly ByteOrder _byteOrder;
 
     private TcpListener? _listener;
     private CancellationTokenSource? _cts;
@@ -30,18 +32,26 @@ public sealed class TcpPlcServer : IPlcConnection
     public event EventHandler<TelegramReceivedEventArgs>? TelegramReceived;
     public event EventHandler<ConnectionStateChangedEventArgs>? ConnectionStateChanged;
 
+    /// <summary>
+    /// Fired when a received payload cannot be matched to any registered telegram definition.
+    /// Subscribe to inspect or log unrecognised messages.
+    /// </summary>
+    public event EventHandler<UnknownTelegramEventArgs>? UnknownTelegramReceived;
+
     public bool IsConnected => _isConnected;
 
     public TcpPlcServer(
         ConnectionConfiguration config,
         TelegramRegistry registry,
         IMessageFramer? framer = null,
-        ILogger<TcpPlcServer>? logger = null)
+        ILogger<TcpPlcServer>? logger = null,
+        ByteOrder byteOrder = ByteOrder.BigEndian)
     {
-        _config   = config   ?? throw new ArgumentNullException(nameof(config));
-        _registry = registry ?? throw new ArgumentNullException(nameof(registry));
-        _framer   = framer   ?? new LengthPrefixFramer();
-        _logger   = logger;
+        _config    = config   ?? throw new ArgumentNullException(nameof(config));
+        _registry  = registry ?? throw new ArgumentNullException(nameof(registry));
+        _framer    = framer   ?? new LengthPrefixFramer();
+        _logger    = logger;
+        _byteOrder = byteOrder;
     }
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
@@ -78,7 +88,7 @@ public sealed class TcpPlcServer : IPlcConnection
     public async Task SendAsync(Telegram telegram, CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        var framed = _framer.Frame(TelegramSerializer.Serialize(telegram));
+        var framed = _framer.Frame(TelegramSerializer.Serialize(telegram, _byteOrder));
         await Task.WhenAll(_clients.Values.Select(c => c.SendAsync(framed, cancellationToken)));
     }
 
@@ -87,7 +97,7 @@ public sealed class TcpPlcServer : IPlcConnection
         where T : ITypedS7Telegram<T>
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        var framed = _framer.Frame(telegram.Serialize());
+        var framed = _framer.Frame(telegram.Serialize(_byteOrder));
         await Task.WhenAll(_clients.Values.Select(c => c.SendAsync(framed, cancellationToken)));
     }
 
@@ -98,7 +108,7 @@ public sealed class TcpPlcServer : IPlcConnection
     {
         if (!_clients.TryGetValue(clientId, out var ctx))
             throw new KeyNotFoundException($"Client {clientId} not found.");
-        await ctx.SendAsync(_framer.Frame(TelegramSerializer.Serialize(telegram)), cancellationToken);
+        await ctx.SendAsync(_framer.Frame(TelegramSerializer.Serialize(telegram, _byteOrder)), cancellationToken);
     }
 
     /// <summary>Sends a strongly-typed telegram to a specific client.</summary>
@@ -107,7 +117,7 @@ public sealed class TcpPlcServer : IPlcConnection
     {
         if (!_clients.TryGetValue(clientId, out var ctx))
             throw new KeyNotFoundException($"Client {clientId} not found.");
-        await ctx.SendAsync(_framer.Frame(telegram.Serialize()), cancellationToken);
+        await ctx.SendAsync(_framer.Frame(telegram.Serialize(_byteOrder)), cancellationToken);
     }
 
     // ── Typed subscription ────────────────────────────────────────────────────
@@ -124,7 +134,7 @@ public sealed class TcpPlcServer : IPlcConnection
         {
             if (e.RawPayload.Length < 2) return;
             if (BinaryPrimitives.ReadUInt16BigEndian(e.RawPayload) != T.MessageId) return;
-            try   { handler(T.Deserialize(e.RawPayload)); }
+            try   { handler(T.Deserialize(e.RawPayload, _byteOrder)); }
             catch (Exception ex) { _logger?.LogWarning(ex, "Typed handler for {T} threw.", typeof(T).Name); }
         };
         TelegramReceived += listener;
@@ -212,16 +222,19 @@ public sealed class TcpPlcServer : IPlcConnection
             }
         }
 
+        // 3. No match — raise UnknownTelegramReceived
         _logger?.LogWarning(
-            "No matching telegram definition for payload of {Length} bytes from client {ClientId}.",
-            payload.Length, clientId);
+            "No matching telegram definition for payload of {Length} bytes from client {ClientId} (candidate TelegramId=0x{Id:X4}).",
+            payload.Length, clientId,
+            payload.Length >= 2 ? (ushort)((payload[0] << 8) | payload[1]) : 0);
+        UnknownTelegramReceived?.Invoke(this, new UnknownTelegramEventArgs(payload));
     }
 
     private void TryDeserializeAndFire(TelegramDefinition def, byte[] payload, Guid clientId)
     {
         try
         {
-            var telegram = TelegramSerializer.Deserialize(def, payload);
+            var telegram = TelegramSerializer.Deserialize(def, payload, _byteOrder);
             TelegramReceived?.Invoke(this, new TelegramReceivedEventArgs(telegram, payload));
         }
         catch (Exception ex)

@@ -34,8 +34,11 @@ public partial class FullTypeTelegram
     [S7LReal] public double LRealVal { get; set; }
 }
 
-/// <summary>Little-endian telegram targeting a non-PLC device.</summary>
-[S7Telegram(messageId: 0x0010, byteOrder: ByteOrder.LittleEndian)]
+/// <summary>
+/// Telegram for a non-PLC device (e.g. a Linux sensor board).
+/// Byte order (little-endian) is now a connection-level setting, not part of the attribute.
+/// </summary>
+[S7Telegram(messageId: 0x0010)]
 public partial class LittleEndianTelegram
 {
     [S7Word] public ushort DeviceId { get; set; }
@@ -161,13 +164,23 @@ public class TypedTelegramTests
         TestStatusTelegram.Definition.MessageId.Should().Be(TestStatusTelegram.MessageId);
     }
 
-    // ── 7. Little-endian byte order ───────────────────────────────────────────
+    // ── 7. TelegramId is same as MessageId (ITelegram instance member) ─────────
 
     [Fact]
-    public void LittleEndian_Word_IsWrittenLittleEndian()
+    public void TelegramId_MatchesMessageId()
+    {
+        var t = new TestStatusTelegram();
+        ((ITelegram)t).TelegramId.Should().Be(TestStatusTelegram.MessageId);
+    }
+
+    // ── 8. Little-endian byte order — now a connection-level parameter ─────────
+
+    [Fact]
+    public void LittleEndian_Word_IsWrittenLittleEndian_WhenByteOrderPassedToSerialize()
     {
         var t = new LittleEndianTelegram { DeviceId = 0x1234 };
-        var bytes = t.Serialize();
+        // byte order is passed at serialize time (as the connection would pass it)
+        var bytes = t.Serialize(ByteOrder.LittleEndian);
 
         // bytes[0..1] = MessageId (always big-endian)
         // bytes[2..3] = DeviceId (little-endian)
@@ -176,16 +189,28 @@ public class TypedTelegramTests
     }
 
     [Fact]
-    public void LittleEndian_RoundTrip()
+    public void LittleEndian_RoundTrip_WithConnectionByteOrder()
     {
         var original = new LittleEndianTelegram { DeviceId = 0xBEEF, Value = 2.718f };
-        var restored = LittleEndianTelegram.Deserialize(original.Serialize());
+        // Simulate a little-endian connection serialising and deserialising
+        var bytes    = original.Serialize(ByteOrder.LittleEndian);
+        var restored = LittleEndianTelegram.Deserialize(bytes, ByteOrder.LittleEndian);
 
         restored.DeviceId.Should().Be(0xBEEF);
         restored.Value.Should().BeApproximately(2.718f, 1e-3f);
     }
 
-    // ── 8. Definition usable via static interface member (zero reflection) ────
+    [Fact]
+    public void DefaultSerialize_IsBigEndian()
+    {
+        var t = new LittleEndianTelegram { DeviceId = 0x1234 };
+        var bytes = t.Serialize(); // default = BigEndian
+
+        ushort beWord = BinaryPrimitives.ReadUInt16BigEndian(bytes.AsSpan(2));
+        beWord.Should().Be(0x1234);
+    }
+
+    // ── 9. Definition usable via static interface member (zero reflection) ─────
 
     [Fact]
     public void Definition_CanBeRegistered_WithoutReflection()
@@ -194,5 +219,15 @@ public class TypedTelegramTests
         registry.Register(TestStatusTelegram.Definition);   // T.Definition — no reflection
         registry.TryGet("TestStatusTelegram", out var def).Should().BeTrue();
         def!.MessageId.Should().Be(0x0001);
+    }
+
+    // ── 10. TelegramId alias on TelegramDefinition ────────────────────────────
+
+    [Fact]
+    public void Definition_TelegramId_MatchesMessageId()
+    {
+        var def = TestStatusTelegram.Definition;
+        def.TelegramId.Should().Be(def.MessageId);
+        def.TelegramId.Should().Be(0x0001);
     }
 }
