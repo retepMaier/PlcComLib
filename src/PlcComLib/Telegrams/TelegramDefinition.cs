@@ -12,9 +12,9 @@ public sealed class TelegramDefinition
     public string? Description { get; set; }
 
     /// <summary>
-    /// 2-byte big-endian MessageId used for typed-telegram dispatch.
+    /// 2-byte MessageId used for typed-telegram dispatch.
     /// <c>0</c> means not set (legacy untyped definitions still work via size-based matching).
-    /// Always transmitted big-endian as the first two bytes of every serialised payload.
+    /// Transmitted as the first two bytes of every serialised payload using the connection's byte order.
     /// </summary>
     public ushort MessageId { get; set; }
 

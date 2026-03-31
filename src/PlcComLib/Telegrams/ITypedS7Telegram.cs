@@ -11,7 +11,7 @@ namespace PlcComLib.Telegrams;
 /// <typeparam name="TSelf">The concrete telegram type (CRTP).</typeparam>
 public interface ITypedS7Telegram<TSelf> : ITelegram where TSelf : ITypedS7Telegram<TSelf>
 {
-    /// <summary>The 2-byte big-endian message identifier prepended to the wire payload.</summary>
+    /// <summary>The 2-byte message identifier prepended to the wire payload.</summary>
     static abstract ushort MessageId { get; }
 
     /// <summary>Total wire size in bytes, including the 2-byte MessageId header.</summary>
@@ -26,8 +26,7 @@ public interface ITypedS7Telegram<TSelf> : ITelegram where TSelf : ITypedS7Teleg
     /// </summary>
     /// <param name="data">Raw wire bytes (including the 2-byte MessageId header).</param>
     /// <param name="byteOrder">
-    /// Byte order for multi-byte data fields. Supplied by the client/server connection.
-    /// The MessageId header is always read big-endian regardless of this setting.
+    /// Byte order for multi-byte data fields and the MessageId header. Supplied by the client/server connection.
     /// </param>
     static abstract TSelf Deserialize(ReadOnlySpan<byte> data,
         ByteOrder byteOrder = ByteOrder.BigEndian);
@@ -36,8 +35,7 @@ public interface ITypedS7Telegram<TSelf> : ITelegram where TSelf : ITypedS7Teleg
     /// Serialises this telegram to its wire payload.
     /// </summary>
     /// <param name="byteOrder">
-    /// Byte order for multi-byte data fields. Supplied by the client/server connection.
-    /// The MessageId header is always written big-endian regardless of this setting.
+    /// Byte order for multi-byte data fields and the MessageId header. Supplied by the client/server connection.
     /// </param>
     byte[] Serialize(ByteOrder byteOrder = ByteOrder.BigEndian);
 }

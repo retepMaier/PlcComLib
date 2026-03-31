@@ -223,13 +223,13 @@ public sealed class S7TelegramGenerator : IIncrementalGenerator
         sb.AppendLine();
 
         // ── Serialize ─────────────────────────────────────────────────────────
-        // byte order is supplied by the caller (the connection); MessageId is always big-endian.
+        // byte order is supplied by the caller (the connection); TelegramId follows the same byte order.
         sb.AppendLine("    public byte[] Serialize(global::PlcComLib.DataTypes.ByteOrder byteOrder = global::PlcComLib.DataTypes.ByteOrder.BigEndian)");
         sb.AppendLine("    {");
         sb.AppendLine("        bool __le = byteOrder == global::PlcComLib.DataTypes.ByteOrder.LittleEndian;");
         sb.AppendLine($"        var __buf = new byte[WireSize];");
-        // MessageId is always big-endian (protocol header, not data field)
-        sb.AppendLine("        global::System.Buffers.Binary.BinaryPrimitives.WriteUInt16BigEndian(__buf.AsSpan(0), MessageId);");
+        // TelegramId follows the connection byte order
+        sb.AppendLine("        if (__le) global::System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(__buf.AsSpan(0), MessageId); else global::System.Buffers.Binary.BinaryPrimitives.WriteUInt16BigEndian(__buf.AsSpan(0), MessageId);");
         int offset = 2;
         foreach (var f in info.Fields)
         {
@@ -247,7 +247,7 @@ public sealed class S7TelegramGenerator : IIncrementalGenerator
         sb.AppendLine("        bool __le = byteOrder == global::PlcComLib.DataTypes.ByteOrder.LittleEndian;");
         sb.AppendLine("        if (data.Length < WireSize)");
         sb.AppendLine($"            throw new global::System.ArgumentException($\"Buffer too short: expected {{WireSize}} bytes, got {{data.Length}}.\");");
-        sb.AppendLine("        ushort __id = global::System.Buffers.Binary.BinaryPrimitives.ReadUInt16BigEndian(data);");
+        sb.AppendLine("        ushort __id = __le ? global::System.Buffers.Binary.BinaryPrimitives.ReadUInt16LittleEndian(data) : global::System.Buffers.Binary.BinaryPrimitives.ReadUInt16BigEndian(data);");
         sb.AppendLine("        if (__id != MessageId)");
         sb.AppendLine($"            throw new global::System.ArgumentException($\"MessageId mismatch: expected 0x{info.MessageId:X4}, got 0x{{__id:X4}}.\");");
         sb.AppendLine($"        var __r = new {info.ClassName}();");

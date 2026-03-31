@@ -182,10 +182,39 @@ public class TypedTelegramTests
         // byte order is passed at serialize time (as the connection would pass it)
         var bytes = t.Serialize(ByteOrder.LittleEndian);
 
-        // bytes[0..1] = MessageId (always big-endian)
+        // bytes[0..1] = MessageId (little-endian, follows connection byte order)
         // bytes[2..3] = DeviceId (little-endian)
         ushort leWord = BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan(2));
         leWord.Should().Be(0x1234);
+    }
+
+    [Fact]
+    public void TelegramId_IsWrittenLittleEndian_WhenByteOrderIsLittleEndian()
+    {
+        var t = new LittleEndianTelegram();
+        var bytes = t.Serialize(ByteOrder.LittleEndian);
+
+        // MessageId 0x0010 in little-endian: low byte first → [0x10, 0x00]
+        ushort leMsgId = BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan(0));
+        leMsgId.Should().Be(LittleEndianTelegram.MessageId);
+
+        // Verify it is NOT big-endian (bytes would differ for 0x0010)
+        bytes[0].Should().Be(0x10); // low byte first in little-endian
+        bytes[1].Should().Be(0x00);
+    }
+
+    [Fact]
+    public void TelegramId_IsWrittenBigEndian_WhenByteOrderIsBigEndian()
+    {
+        var t = new LittleEndianTelegram();
+        var bytes = t.Serialize(ByteOrder.BigEndian);
+
+        // MessageId 0x0010 in big-endian: high byte first → [0x00, 0x10]
+        ushort beMsgId = BinaryPrimitives.ReadUInt16BigEndian(bytes.AsSpan(0));
+        beMsgId.Should().Be(LittleEndianTelegram.MessageId);
+
+        bytes[0].Should().Be(0x00); // high byte first in big-endian
+        bytes[1].Should().Be(0x10);
     }
 
     [Fact]

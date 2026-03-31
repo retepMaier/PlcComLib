@@ -134,7 +134,7 @@ public sealed class UdpPlcServer : IPlcConnection
         EventHandler<TelegramReceivedEventArgs> listener = (_, e) =>
         {
             if (e.RawPayload.Length < 2) return;
-            if (BinaryPrimitives.ReadUInt16BigEndian(e.RawPayload) != T.MessageId) return;
+            if (ReadTelegramId(e.RawPayload) != T.MessageId) return;
             try   { handler(T.Deserialize(e.RawPayload, _byteOrder)); }
             catch (Exception ex) { _logger?.LogWarning(ex, "Typed handler for {T} threw.", typeof(T).Name); }
         };
@@ -166,7 +166,7 @@ public sealed class UdpPlcServer : IPlcConnection
         // 1. MessageId-based dispatch
         if (payload.Length >= 2)
         {
-            ushort msgId = BinaryPrimitives.ReadUInt16BigEndian(payload);
+            ushort msgId = ReadTelegramId(payload);
             foreach (var def in _registry.Definitions)
             {
                 if (def.MessageId != 0 && def.MessageId == msgId)
@@ -191,8 +191,8 @@ public sealed class UdpPlcServer : IPlcConnection
         _logger?.LogWarning(
             "No matching UDP telegram definition for payload of {Length} bytes (candidate TelegramId=0x{Id:X4}).",
             payload.Length,
-            payload.Length >= 2 ? (ushort)((payload[0] << 8) | payload[1]) : 0);
-        UnknownTelegramReceived?.Invoke(this, new UnknownTelegramEventArgs(payload));
+            payload.Length >= 2 ? ReadTelegramId(payload) : 0);
+        UnknownTelegramReceived?.Invoke(this, new UnknownTelegramEventArgs(payload, _byteOrder));
     }
 
     private void TryDeserializeAndFire(TelegramDefinition def, byte[] payload)
@@ -207,6 +207,11 @@ public sealed class UdpPlcServer : IPlcConnection
             _logger?.LogWarning(ex, "Failed to deserialize UDP telegram '{Id}'.", def.Id);
         }
     }
+
+    private ushort ReadTelegramId(ReadOnlySpan<byte> data) =>
+        _byteOrder == ByteOrder.LittleEndian
+            ? BinaryPrimitives.ReadUInt16LittleEndian(data)
+            : BinaryPrimitives.ReadUInt16BigEndian(data);
 
     public async ValueTask DisposeAsync()
     {
