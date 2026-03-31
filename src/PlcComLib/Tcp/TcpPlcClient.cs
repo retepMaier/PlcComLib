@@ -1,0 +1,210 @@
+using System.Net.Sockets;
+using Microsoft.Extensions.Logging;
+using PlcComLib.Core;
+using PlcComLib.Framing;
+using PlcComLib.Telegrams;
+
+namespace PlcComLib.Tcp;
+
+/// <summary>
+/// TCP client that connects to a PLC endpoint.
+/// Supports automatic reconnection, message framing, and full-duplex communication.
+/// This class is thread-safe.
+/// </summary>
+public sealed class TcpPlcClient : IPlcConnection
+{
+    private readonly ConnectionConfiguration _config;
+    private readonly TelegramRegistry _registry;
+    private readonly IMessageFramer _framer;
+    private readonly ILogger<TcpPlcClient>? _logger;
+
+    private TcpClient? _client;
+    private NetworkStream? _stream;
+    private CancellationTokenSource? _cts;
+    private Task? _receiveTask;
+    private readonly SemaphoreSlim _sendLock = new(1, 1);
+    private volatile bool _isConnected;
+    private bool _disposed;
+
+    public event EventHandler<TelegramReceivedEventArgs>? TelegramReceived;
+    public event EventHandler<ConnectionStateChangedEventArgs>? ConnectionStateChanged;
+
+    public bool IsConnected => _isConnected;
+
+    public TcpPlcClient(
+        ConnectionConfiguration config,
+        TelegramRegistry registry,
+        IMessageFramer? framer = null,
+        ILogger<TcpPlcClient>? logger = null)
+    {
+        _config = config ?? throw new ArgumentNullException(nameof(config));
+        _registry = registry ?? throw new ArgumentNullException(nameof(registry));
+        _framer = framer ?? new LengthPrefixFramer();
+        _logger = logger;
+    }
+
+    public async Task StartAsync(CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        _receiveTask = ConnectLoopAsync(_cts.Token);
+        await Task.CompletedTask;
+    }
+
+    public async Task StopAsync(CancellationToken cancellationToken = default)
+    {
+        if (_cts != null) await _cts.CancelAsync();
+        if (_receiveTask != null)
+            try { await _receiveTask.WaitAsync(cancellationToken); } catch { /* ignore */ }
+        CloseConnection("Stopped");
+    }
+
+    public async Task SendAsync(Telegram telegram, CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (!_isConnected || _stream == null)
+            throw new InvalidOperationException("Not connected.");
+
+        var payload = TelegramSerializer.Serialize(telegram);
+        var framed = _framer.Frame(payload);
+
+        await _sendLock.WaitAsync(cancellationToken);
+        try
+        {
+            await _stream.WriteAsync(framed, cancellationToken);
+            await _stream.FlushAsync(cancellationToken);
+        }
+        finally
+        {
+            _sendLock.Release();
+        }
+    }
+
+    private async Task ConnectLoopAsync(CancellationToken ct)
+    {
+        while (!ct.IsCancellationRequested)
+        {
+            try
+            {
+                _logger?.LogInformation("Connecting to {Host}:{Port}...", _config.Host, _config.Port);
+                _client = new TcpClient();
+                _client.SendTimeout = _config.TimeoutMs;
+                _client.ReceiveTimeout = _config.TimeoutMs;
+                await _client.ConnectAsync(_config.Host, _config.Port, ct);
+                _stream = _client.GetStream();
+                SetConnected(true, "Connected");
+                await ReceiveLoopAsync(ct);
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "Connection to {Host}:{Port} failed. Retrying in {Interval}ms.",
+                    _config.Host, _config.Port, _config.ReconnectIntervalMs);
+            }
+            finally
+            {
+                CloseConnection("Disconnected");
+            }
+
+            if (!ct.IsCancellationRequested)
+            {
+                try { await Task.Delay(_config.ReconnectIntervalMs, ct); }
+                catch (OperationCanceledException) { break; }
+            }
+        }
+    }
+
+    private async Task ReceiveLoopAsync(CancellationToken ct)
+    {
+        var buffer = new byte[65536];
+        var accumulated = new System.IO.MemoryStream();
+
+        while (!ct.IsCancellationRequested && _stream != null)
+        {
+            int bytesRead;
+            try
+            {
+                bytesRead = await _stream.ReadAsync(buffer, ct);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger?.LogWarning(ex, "Read error on TCP stream.");
+                break;
+            }
+
+            if (bytesRead == 0)
+            {
+                _logger?.LogInformation("Remote endpoint closed the connection.");
+                break;
+            }
+
+            accumulated.Write(buffer, 0, bytesRead);
+            ProcessBuffer(accumulated);
+        }
+    }
+
+    private void ProcessBuffer(System.IO.MemoryStream accumulated)
+    {
+        while (true)
+        {
+            var data = accumulated.ToArray();
+            if (!_framer.TryExtract(data, out var message, out int consumed)) break;
+
+            int remaining = data.Length - consumed;
+            accumulated.SetLength(0);
+            if (remaining > 0)
+                accumulated.Write(data, consumed, remaining);
+
+            DispatchTelegram(message.ToArray());
+        }
+    }
+
+    private void DispatchTelegram(byte[] payload)
+    {
+        foreach (var def in _registry.Definitions)
+        {
+            if (def.TotalWireSize == payload.Length)
+            {
+                try
+                {
+                    var telegram = TelegramSerializer.Deserialize(def, payload);
+                    TelegramReceived?.Invoke(this, new TelegramReceivedEventArgs(telegram));
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    _logger?.LogWarning(ex, "Failed to deserialize telegram '{Id}'.", def.Id);
+                }
+            }
+        }
+        _logger?.LogWarning("No matching telegram definition for payload of {Length} bytes.", payload.Length);
+    }
+
+    private void SetConnected(bool connected, string reason)
+    {
+        _isConnected = connected;
+        ConnectionStateChanged?.Invoke(this, new ConnectionStateChangedEventArgs(connected, reason));
+        _logger?.LogInformation("Connection state: {State} ({Reason})", connected ? "Connected" : "Disconnected", reason);
+    }
+
+    private void CloseConnection(string reason)
+    {
+        if (_isConnected) SetConnected(false, reason);
+        try { _stream?.Dispose(); } catch { /* ignore */ }
+        try { _client?.Dispose(); } catch { /* ignore */ }
+        _stream = null;
+        _client = null;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        await StopAsync();
+        _sendLock.Dispose();
+        _cts?.Dispose();
+    }
+}
