@@ -68,6 +68,21 @@ public partial class CharArrayTelegram
     [S7CharArray(4)]     public char[]?       Code     { get; set; }
 }
 
+/// <summary>
+/// Telegram where [MsgId] is declared as <c>int</c> (not ushort) and
+/// [MsgLength] is declared as <c>ushort</c> (not int).
+/// Validates that the generator supports any numeric type for these framing properties.
+/// </summary>
+[S7Telegram]
+public partial class FlexibleTypeTelegram
+{
+    [MsgId(0x0030)] public partial int    MyId     { get; }
+    [MsgLength]     public partial ushort MyLength { get; }
+
+    [S7Word] public ushort SensorId { get; set; }
+    [S7DInt] public int    Reading  { get; set; }
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 public class TypedTelegramTests
@@ -426,5 +441,50 @@ public class TypedTelegramTests
         var t = new CharArrayTelegram();
         t.PacketLength.Should().Be(CharArrayTelegram.WireSize);
         ((ITelegram)t).Length.Should().Be(CharArrayTelegram.WireSize);
+    }
+
+    // ── 14. [MsgId] and [MsgLength] with flexible property types ─────────────
+
+    [Fact]
+    public void FlexibleType_MsgId_DeclaresAsInt_ReturnsCorrectValue()
+    {
+        // MyId is declared as 'int' (not ushort) but [MsgId(0x0030)] is set.
+        var t = new FlexibleTypeTelegram();
+        t.MyId.Should().Be(0x0030);
+        t.MyId.Should().Be((int)FlexibleTypeTelegram.MessageId);
+        ((ITelegram)t).MessageId.Should().Be(0x0030);
+    }
+
+    [Fact]
+    public void FlexibleType_MsgLength_DeclaresAsUshort_ReturnsWireSize()
+    {
+        // MyLength is declared as 'ushort' (not int) but [MsgLength] is applied.
+        // WireSize = 2 (header) + 2 (SensorId Word) + 4 (Reading DInt) = 8
+        var t = new FlexibleTypeTelegram();
+        t.MyLength.Should().Be((ushort)FlexibleTypeTelegram.WireSize);
+        t.MyLength.Should().Be(8);
+        ((ITelegram)t).Length.Should().Be(FlexibleTypeTelegram.WireSize);
+    }
+
+    [Fact]
+    public void FlexibleType_RoundTrip_WorksCorrectly()
+    {
+        var original = new FlexibleTypeTelegram { SensorId = 0xABCD, Reading = -42 };
+        var bytes    = original.Serialize();
+        var restored = FlexibleTypeTelegram.Deserialize(bytes);
+
+        restored.SensorId.Should().Be(0xABCD);
+        restored.Reading.Should().Be(-42);
+    }
+
+    [Fact]
+    public void FlexibleType_MsgId_IsWrittenCorrectlyOnWire()
+    {
+        var t = new FlexibleTypeTelegram();
+        var bytes = t.Serialize();
+
+        // MessageId 0x0030 is still written as 2-byte Word at offset 0 (big-endian)
+        ushort wireId = BinaryPrimitives.ReadUInt16BigEndian(bytes.AsSpan(0));
+        wireId.Should().Be(0x0030);
     }
 }

@@ -30,9 +30,16 @@ Add the `PlcComLib.SourceGenerator` project as an **Analyzer** reference. The ge
 using PlcComLib.SourceGenerator;
 
 // A telegram for a Siemens S7 PLC (big-endian by default)
-[S7Telegram(messageId: 0x0001)]
+[S7Telegram]
 public partial class MachineStatus
 {
+    // [MsgId] marks this property as the message identifier. The property name is
+    // your choice; the type can be any numeric type (ushort, int, uint, …).
+    [MsgId(0x0001)] public partial ushort MsgId       { get; }
+    // [MsgLength] marks this property as the total wire size. The type can be
+    // any numeric type (int, ushort, uint, …). Byte order follows the connection setting.
+    [MsgLength]     public partial int    WireLength   { get; }
+
     [S7Word]                  public ushort MachineId    { get; set; }
     [S7Real]                  public float  Speed        { get; set; }
     [S7Real]                  public float  Temperature  { get; set; }
@@ -40,9 +47,12 @@ public partial class MachineStatus
 }
 
 // A telegram for a Linux/Windows sensor board (little-endian set on the connection)
-[S7Telegram(messageId: 0x0010)]
+[S7Telegram]
 public partial class SensorReading
 {
+    [MsgId(0x0010)] public partial ushort MsgId  { get; }
+    [MsgLength]     public partial int    Length { get; }
+
     [S7Word] public ushort SensorId { get; set; }
     [S7Real] public float  Value    { get; set; }
 }
@@ -52,9 +62,11 @@ The generator emits (among other members):
 
 | Member | Description |
 |--------|-------------|
-| `static ushort MessageId` | The compile-time constant from the attribute |
+| `static ushort MessageId` | The compile-time constant from `[MsgId]` |
 | `ushort TelegramId` | Instance property — same value as `MessageId` at runtime; fulfils the `ITelegram` interface (instance-level alias of `MessageId`) |
 | `static int WireSize` | 2 (header) + sum of all field wire sizes |
+| `{type} YourMsgIdPropName` | Partial property implementation for the `[MsgId]`-decorated property; type is whatever you declared |
+| `{type} YourMsgLengthPropName` | Partial property implementation for the `[MsgLength]`-decorated property; type is whatever you declared |
 | `static TelegramDefinition Definition` | Built lazily from the declared attributes (no JSON required) |
 | `byte[] Serialize(ByteOrder byteOrder = BigEndian)` | Inlined `BinaryPrimitives` calls — no boxing |
 | `static T Deserialize(ReadOnlySpan<byte>, ByteOrder byteOrder = BigEndian)` | Validates TelegramId & length, then reads fields |
@@ -91,7 +103,7 @@ DATA_BLOCK DB1
   VERSION : 0.1
 
   STRUCT
-    TelegramId  : WORD;      // DBW0  — matches [S7Telegram(messageId: 0x0001)]
+    TelegramId  : WORD;      // DBW0  — matches [MsgId(0x0001)]
     MachineId   : WORD;      // DBW2  — matches [S7Word]
     Speed       : REAL;      // DBD4  — matches [S7Real]
     Temperature : REAL;      // DBD8  — matches [S7Real]
@@ -111,10 +123,10 @@ END_DATA_BLOCK
 
 ## MessageId / TelegramId Explained
 
-Every telegram type declared with `[S7Telegram(messageId: 0x0001)]` carries a **MessageId** — a 2-byte unsigned integer that uniquely identifies the telegram type on the wire.
+Every telegram type carries a **MessageId** — a 2-byte unsigned integer that uniquely identifies the telegram type on the wire. The MessageId value is set via the `[MsgId]` attribute on a `partial` property.
 
 > **Two names, one value:** The same 2-byte identifier is accessible in two ways:
-> - **`MessageId`** — the `static` compile-time constant on the class (set via the `messageId` attribute parameter).
+> - **`MessageId`** — the `static` compile-time constant on the class (set via `[MsgId(0x0001)]` on a property).
 > - **`TelegramId`** — the instance property from the `ITelegram` interface; always returns the same value as `MessageId` at runtime.
 >
 > On the **wire and in the S7 DB** it is the first 2 bytes / first `WORD` field (`DBW0`).
@@ -442,9 +454,12 @@ await server.StopAsync();
 
 ```csharp
 // Declare the telegram — byte order is NOT part of the attribute any more
-[S7Telegram(messageId: 0x0020)]
+[S7Telegram]
 public partial class DeviceCommand
 {
+    [MsgId(0x0020)] public partial ushort MsgId { get; }
+    [MsgLength]     public partial int    Length { get; }
+
     [S7DWord] public uint  CommandCode { get; set; }
     [S7Real]  public float Parameter   { get; set; }
     [S7Bool]  public bool  Execute     { get; set; }
@@ -552,14 +567,41 @@ handled generically.
 ### `[S7Telegram]` attribute
 
 ```csharp
-[S7Telegram(ushort messageId)]
+[S7Telegram]
+public partial class MyTelegram { ... }
 ```
+
+Marks a `partial` class as a strongly-typed S7 telegram. The generator implements `ITelegram`, `Serialize`, `Deserialize`, `Definition`, and the framing partial properties.
+
+> **Byte order is not set per telegram.** Use `.WithByteOrder()` on the connection builder instead — all telegrams on a given connection share the same byte order.
+
+### `[MsgId(ushort messageId)]` attribute
+
+```csharp
+[MsgId(0x0001)] public partial ushort MyId { get; }
+// or any other numeric type:
+[MsgId(0x0001)] public partial int    MyId { get; }
+```
+
+Marks a `partial` property as the **message identifier** for this telegram. The generator implements the property to return the `messageId` value, cast to whichever numeric type you declared. The 2-byte identifier is always written as the first two bytes of every serialised payload; byte order follows the connection setting.
 
 | Parameter | Description |
 |-----------|-------------|
-| `messageId` | Unique 2-byte identifier. Always transmitted big-endian as the first 2 bytes of every payload. Must be unique across all telegram types in your project. |
+| `messageId` | Unique 2-byte identifier (`ushort`). Must be unique across all telegram types in your project. |
 
-> **Byte order is no longer set per telegram.** Use `.WithByteOrder()` on the connection builder instead. This makes the byte order a connection concern — all telegrams on a given connection share the same byte order.
+> **Flexible property type:** The decorated property may use any numeric type — `byte`, `short`, `ushort`, `int`, `uint`, `long`, `ulong`, etc. The generator casts the `ushort` wire value to the declared type automatically.
+
+### `[MsgLength]` attribute
+
+```csharp
+[MsgLength] public partial int    MyLength { get; }
+// or any other numeric type:
+[MsgLength] public partial ushort MyLength { get; }
+```
+
+Marks a `partial` property as the **total wire size** of the serialised telegram (including the 2-byte message-id header). The generator implements the property to return `WireSize`, cast to whichever numeric type you declared.
+
+> **Flexible property type:** The decorated property may use any numeric type — `byte`, `short`, `ushort`, `int`, `uint`, `long`, `ulong`, etc. The generator casts the computed wire size to the declared type automatically.
 
 ### Property attributes by S7 data type
 
