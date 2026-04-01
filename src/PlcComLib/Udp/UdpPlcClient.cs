@@ -4,6 +4,7 @@ using System.Net.Sockets;
 using Microsoft.Extensions.Logging;
 using PlcComLib.Core;
 using PlcComLib.DataTypes;
+using PlcComLib.Framing;
 using PlcComLib.Telegrams;
 
 namespace PlcComLib.Udp;
@@ -186,6 +187,7 @@ public sealed class UdpPlcClient : IPlcConnection
             {
                 if (def.MessageId != 0 && def.MessageId == msgId)
                 {
+                    if (!ValidateLength(def, payload)) return;
                     TryDeserializeAndFire(def, payload, remoteAddress, port);
                     return;
                 }
@@ -197,6 +199,7 @@ public sealed class UdpPlcClient : IPlcConnection
         {
             if (def.MessageId == 0 && def.EffectiveWireSize == payload.Length)
             {
+                if (!ValidateLength(def, payload)) return;
                 TryDeserializeAndFire(def, payload, remoteAddress, port);
                 return;
             }
@@ -208,6 +211,39 @@ public sealed class UdpPlcClient : IPlcConnection
             payload.Length,
             payload.Length >= 2 ? ReadTelegramId(payload) : 0);
         UnknownTelegramReceived?.Invoke(this, new UnknownTelegramEventArgs(payload, _byteOrder));
+    }
+
+    /// <summary>
+    /// Validates the embedded length field (if configured via
+    /// <c>.WithLength&lt;TType&gt;(length, byteOffset)</c>).
+    /// Returns <c>true</c> when valid (or when no length field is configured).
+    /// Returns <c>false</c> and raises <see cref="UnknownTelegramReceived"/> on mismatch.
+    /// </summary>
+    private bool ValidateLength(TelegramDefinition def, byte[] payload)
+    {
+        if (def.LengthByteOffset < 0) return true;
+
+        int fieldEnd = def.LengthByteOffset + S7TypeConverter.GetWireSize(def.LengthDataType);
+        if (payload.Length < fieldEnd)
+        {
+            _logger?.LogWarning(
+                "UDP telegram '{Id}': length field at offset {Offset} extends beyond payload ({PayloadLen} bytes).",
+                def.Id, def.LengthByteOffset, payload.Length);
+            UnknownTelegramReceived?.Invoke(this, new UnknownTelegramEventArgs(payload, _byteOrder));
+            return false;
+        }
+
+        long receivedLength = TelegramIdFramer.ReadLength(payload, def.LengthByteOffset, def.LengthDataType, _byteOrder);
+        if (receivedLength != def.ConfiguredWireSize)
+        {
+            _logger?.LogWarning(
+                "UDP telegram '{Id}': length field mismatch — expected {Expected}, got {Received}.",
+                def.Id, def.ConfiguredWireSize, receivedLength);
+            UnknownTelegramReceived?.Invoke(this, new UnknownTelegramEventArgs(payload, _byteOrder));
+            return false;
+        }
+
+        return true;
     }
 
     private void TryDeserializeAndFire(TelegramDefinition def, byte[] payload, string remoteAddress, int port)

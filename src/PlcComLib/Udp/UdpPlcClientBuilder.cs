@@ -92,6 +92,29 @@ public sealed class UdpPlcClientBuilder
     }
 
     /// <summary>
+    /// Sets the TelegramId for the most recently registered telegram, together with the
+    /// byte offset and S7 data type used to read that id from the received payload.
+    /// </summary>
+    /// <typeparam name="TType">
+    /// S7 data type marker (e.g. <see cref="PlcComLib.DataTypes.S7Word"/>,
+    /// <see cref="PlcComLib.DataTypes.S7Int"/>) that determines the field width and
+    /// interpretation at <paramref name="byteOffset"/>.
+    /// </typeparam>
+    /// <param name="id">Expected id value for this telegram type.</param>
+    /// <param name="byteOffset">Zero-based byte offset in the payload where the id is located.</param>
+    public UdpPlcClientBuilder WithMessageId<TType>(ushort id, int byteOffset)
+        where TType : IS7FramingType
+    {
+        if (_lastRegisteredDef is not null)
+        {
+            _lastRegisteredDef.MessageId           = id;
+            _lastRegisteredDef.MessageIdByteOffset = byteOffset;
+            _lastRegisteredDef.MessageIdDataType   = TType.DataType;
+        }
+        return this;
+    }
+
+    /// <summary>
     /// Sets the expected total wire size for the most recently registered telegram.
     /// For source-generated telegrams, pass <c>T.WireSize</c>.
     /// </summary>
@@ -99,6 +122,32 @@ public sealed class UdpPlcClientBuilder
     {
         if (_lastRegisteredDef is not null)
             _lastRegisteredDef.ConfiguredWireSize = wireSize;
+        return this;
+    }
+
+    /// <summary>
+    /// Sets the expected total wire size for the most recently registered telegram and
+    /// configures a length-field validation check.
+    /// When a datagram is received the value at <paramref name="byteOffset"/> (read as
+    /// <typeparamref name="TType"/>) is compared to <paramref name="length"/>; a mismatch
+    /// triggers a log warning and raises <c>UnknownTelegramReceived</c>.
+    /// </summary>
+    /// <typeparam name="TType">
+    /// S7 data type marker (e.g. <see cref="PlcComLib.DataTypes.S7Word"/>,
+    /// <see cref="PlcComLib.DataTypes.S7Int"/>) that determines the field width and
+    /// interpretation at <paramref name="byteOffset"/>.
+    /// </typeparam>
+    /// <param name="length">Expected total length in bytes.</param>
+    /// <param name="byteOffset">Zero-based byte offset in the payload where the length field is located.</param>
+    public UdpPlcClientBuilder WithLength<TType>(int length, int byteOffset)
+        where TType : IS7FramingType
+    {
+        if (_lastRegisteredDef is not null)
+        {
+            _lastRegisteredDef.ConfiguredWireSize = length;
+            _lastRegisteredDef.LengthByteOffset   = byteOffset;
+            _lastRegisteredDef.LengthDataType     = TType.DataType;
+        }
         return this;
     }
 

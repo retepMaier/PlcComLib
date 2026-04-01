@@ -1,3 +1,5 @@
+using PlcComLib.DataTypes;
+
 namespace PlcComLib.Telegrams;
 
 /// <summary>
@@ -28,6 +30,32 @@ public sealed class TelegramDefinition
         get => MessageId;
         set => MessageId = value;
     }
+
+    /// <summary>
+    /// Byte offset in the received payload at which the MessageId value is read.
+    /// Default is <c>0</c> (first two bytes of the payload).
+    /// Configure via <c>.WithMessageId&lt;TType&gt;(id, byteOffset)</c> on the connection builder.
+    /// </summary>
+    public int MessageIdByteOffset { get; set; } = 0;
+
+    /// <summary>
+    /// S7 data type used to read the MessageId from the payload at <see cref="MessageIdByteOffset"/>.
+    /// Default is <see cref="S7DataType.Word"/> (unsigned 16-bit).
+    /// </summary>
+    public S7DataType MessageIdDataType { get; set; } = S7DataType.Word;
+
+    /// <summary>
+    /// Byte offset in the received payload at which the length field is read for validation.
+    /// <c>-1</c> (default) means no length-field validation is performed.
+    /// Configure via <c>.WithLength&lt;TType&gt;(length, byteOffset)</c> on the connection builder.
+    /// </summary>
+    public int LengthByteOffset { get; set; } = -1;
+
+    /// <summary>
+    /// S7 data type used to read the length field from the payload at <see cref="LengthByteOffset"/>.
+    /// Default is <see cref="S7DataType.Word"/> (unsigned 16-bit).
+    /// </summary>
+    public S7DataType LengthDataType { get; set; } = S7DataType.Word;
 
     public List<TelegramField> Fields { get; set; } = [];
 
