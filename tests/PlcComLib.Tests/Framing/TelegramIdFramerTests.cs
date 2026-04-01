@@ -25,7 +25,7 @@ public class TelegramIdFramerTests
         MessageId = 0x0001,
         Fields    =
         [
-            new TelegramField { Name = "__MessageId",     DataType = S7DataType.Word  }, // 2
+            new TelegramField { Name = "__TelegramId",     DataType = S7DataType.Word  }, // 2
             new TelegramField { Name = "__MessageLength", DataType = S7DataType.Word  }, // 2
             new TelegramField { Name = "f",               DataType = S7DataType.LWord }, // 8
         ],
@@ -37,7 +37,7 @@ public class TelegramIdFramerTests
         MessageId = 0x0002,
         Fields    =
         [
-            new TelegramField { Name = "__MessageId",     DataType = S7DataType.Word }, // 2
+            new TelegramField { Name = "__TelegramId",     DataType = S7DataType.Word }, // 2
             new TelegramField { Name = "__MessageLength", DataType = S7DataType.Word }, // 2
             new TelegramField { Name = "f",               DataType = S7DataType.Word }, // 2
         ],

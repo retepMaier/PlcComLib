@@ -12,9 +12,10 @@ public sealed class TelegramDefinition
     public string? Description { get; set; }
 
     /// <summary>
-    /// 2-byte MessageId used for typed-telegram dispatch.
+    /// 2-byte MessageId used for typed-telegram dispatch and as the first two bytes of
+    /// every serialised payload. Set at registration time via
+    /// <c>RegisterTelegram&lt;T&gt;().WithMessageId(id)</c> on the connection builder.
     /// <c>0</c> means not set (legacy untyped definitions still work via size-based matching).
-    /// Transmitted as the first two bytes of every serialised payload using the connection's byte order.
     /// </summary>
     public ushort MessageId { get; set; }
 
@@ -29,5 +30,23 @@ public sealed class TelegramDefinition
     }
 
     public List<TelegramField> Fields { get; set; } = [];
+
+    /// <summary>
+    /// Total wire size derived from the declared field list.
+    /// For source-generated telegrams this always equals <see cref="ConfiguredWireSize"/>.
+    /// </summary>
     public int TotalWireSize => Fields.Sum(f => f.WireSize);
+
+    /// <summary>
+    /// Wire size explicitly configured via <c>.WithLength(size)</c> on the connection builder.
+    /// When non-zero, framers prefer this value over <see cref="TotalWireSize"/>.
+    /// Useful for hand-crafted definitions whose <see cref="Fields"/> list is empty.
+    /// </summary>
+    public int ConfiguredWireSize { get; set; }
+
+    /// <summary>
+    /// Effective wire size used by framers: <see cref="ConfiguredWireSize"/> when non-zero,
+    /// otherwise <see cref="TotalWireSize"/>.
+    /// </summary>
+    public int EffectiveWireSize => ConfiguredWireSize > 0 ? ConfiguredWireSize : TotalWireSize;
 }

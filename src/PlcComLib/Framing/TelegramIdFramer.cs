@@ -11,14 +11,16 @@ namespace PlcComLib.Framing;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Wire format: <c>[TelegramId: UInt16 (2 bytes)][Payload: byte * (WireSize - 2)]</c>.
+/// Wire format: <c>[TelegramId: UInt16 (2 bytes)][Data fields…]</c>.
 /// The TelegramId is the first two bytes of every message and identifies the telegram type.
 /// The expected total frame size is looked up from the registered <see cref="TelegramDefinition"/> list.
+/// Both <see cref="TelegramDefinition.TotalWireSize"/> (from field definitions) and
+/// <see cref="TelegramDefinition.ConfiguredWireSize"/> (from <c>.WithLength(size)</c>) are considered.
 /// </para>
 /// <para>
-/// Use this framer when communicating with a Siemens PLC via TSEND/TRCV and the DB block
-/// starts with the telegram identifier (via the <c>[MsgId]</c> attribute). Both sides must
-/// agree on the same set of telegram definitions.
+/// This is the default framer when using source-generated typed telegrams registered via
+/// <c>RegisterTelegram&lt;T&gt;().WithMessageId(id).WithLength(size)</c> on the connection builder.
+/// Both sides of the connection must agree on the same set of telegram definitions.
 /// </para>
 /// </remarks>
 public sealed class TelegramIdFramer : IMessageFramer
@@ -43,7 +45,7 @@ public sealed class TelegramIdFramer : IMessageFramer
         foreach (var def in definitions)
         {
             if (def.MessageId != 0)
-                dict[def.MessageId] = def.TotalWireSize;
+                dict[def.MessageId] = def.EffectiveWireSize;
         }
         _sizeByTelegramId = dict;
     }

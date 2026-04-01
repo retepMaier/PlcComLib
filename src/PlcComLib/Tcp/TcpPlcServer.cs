@@ -55,7 +55,7 @@ public sealed class TcpPlcServer : IPlcConnection
     {
         _config    = config   ?? throw new ArgumentNullException(nameof(config));
         _registry  = registry ?? throw new ArgumentNullException(nameof(registry));
-        _framer    = framer   ?? new LengthPrefixFramer();
+        _framer    = framer   ?? new TelegramIdFramer(registry.Definitions, byteOrder);
         _logger    = logger;
         _byteOrder = byteOrder;
     }
@@ -151,7 +151,7 @@ public sealed class TcpPlcServer : IPlcConnection
         EventHandler<TelegramReceivedEventArgs> listener = (_, e) =>
         {
             if (e.RawPayload.Length < 2) return;
-            if (ReadTelegramId(e.RawPayload) != T.MessageId) return;
+            if (ReadTelegramId(e.RawPayload) != T.Definition.MessageId) return;
             try   { handler(T.Deserialize(e.RawPayload, _byteOrder)); }
             catch (Exception ex) { _logger?.LogWarning(ex, "Typed handler for {T} threw.", typeof(T).Name); }
         };
@@ -171,7 +171,7 @@ public sealed class TcpPlcServer : IPlcConnection
         EventHandler<TelegramReceivedEventArgs> listener = (_, e) =>
         {
             if (e.RawPayload.Length < 2) return;
-            if (ReadTelegramId(e.RawPayload) != T.MessageId) return;
+            if (ReadTelegramId(e.RawPayload) != T.Definition.MessageId) return;
             try   { handler(T.Deserialize(e.RawPayload, _byteOrder), e.RemoteAddress, e.Port); }
             catch (Exception ex) { _logger?.LogWarning(ex, "Typed handler for {T} threw.", typeof(T).Name); }
         };
@@ -256,7 +256,7 @@ public sealed class TcpPlcServer : IPlcConnection
         // 2. Size-based fallback
         foreach (var def in _registry.Definitions)
         {
-            if (def.MessageId == 0 && def.TotalWireSize == payload.Length)
+            if (def.MessageId == 0 && def.EffectiveWireSize == payload.Length)
             {
                 TryDeserializeAndFire(def, payload, ctx);
                 return;
