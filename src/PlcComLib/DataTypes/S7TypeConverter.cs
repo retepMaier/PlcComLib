@@ -12,6 +12,7 @@ public static class S7TypeConverter
             S7DataType.S7String  => 2 + maxStringLength,
             S7DataType.S7WString => 4 + maxStringLength * 2,
             S7DataType.Raw       => rawByteCount,
+            S7DataType.CharArray => rawByteCount,
             _                    => ByteSwapper.GetByteSize(dataType)
         };
     }

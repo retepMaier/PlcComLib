@@ -12,7 +12,7 @@ namespace PlcComLib.Telegrams;
 public interface ITypedS7Telegram<TSelf> : ITelegram where TSelf : ITypedS7Telegram<TSelf>
 {
     /// <summary>The 2-byte message identifier prepended to the wire payload.</summary>
-    static abstract ushort MessageId { get; }
+    new static abstract ushort MessageId { get; }
 
     /// <summary>Total wire size in bytes, including the 2-byte MessageId header.</summary>
     static abstract int WireSize { get; }

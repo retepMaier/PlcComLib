@@ -183,6 +183,13 @@ public sealed class S7TelegramGenerator : IIncrementalGenerator
                         byteCount = System.Convert.ToInt32(attr.ConstructorArguments[0].Value);
                     return new(name, S7Kind.Raw, "global::PlcComLib.DataTypes.S7DataType.Raw", byteCount, 0, byteCount);
                 }
+                case "S7CharArrayAttribute":
+                {
+                    int length = 0;
+                    if (attr.ConstructorArguments.Length > 0 && attr.ConstructorArguments[0].Value is not null)
+                        length = System.Convert.ToInt32(attr.ConstructorArguments[0].Value);
+                    return new(name, S7Kind.CharArray, "global::PlcComLib.DataTypes.S7DataType.CharArray", length, 0, length);
+                }
             }
         }
         return null;
@@ -254,7 +261,7 @@ public sealed class S7TelegramGenerator : IIncrementalGenerator
             sb.Append($"                new global::PlcComLib.Telegrams.TelegramField {{ Name = \"{f.Name}\", DataType = {f.DataTypeExpr}");
             if (f.Kind is S7Kind.S7String or S7Kind.S7WString)
                 sb.Append($", MaxStringLength = (byte){System.Math.Min(f.MaxStringLength, 254)}");
-            if (f.Kind == S7Kind.Raw)
+            if (f.Kind is S7Kind.Raw or S7Kind.CharArray)
                 sb.Append($", RawByteCount = {f.RawByteCount}");
             sb.AppendLine(" },");
         }
@@ -363,6 +370,14 @@ public sealed class S7TelegramGenerator : IIncrementalGenerator
             case S7Kind.Raw:
                 sb.AppendLine($"        ({f.Name} ?? global::System.Array.Empty<byte>()).CopyTo(__buf, {offset});");
                 break;
+            case S7Kind.CharArray:
+                sb.AppendLine($"        {{");
+                sb.AppendLine($"            var __ca = {f.Name};");
+                sb.AppendLine($"            int __caLen = __ca?.Length ?? 0;");
+                sb.AppendLine($"            for (int __i = 0; __i < {f.WireSize}; __i++)");
+                sb.AppendLine($"                __buf[{offset} + __i] = __i < __caLen ? (byte)__ca![__i] : (byte)0;");
+                sb.AppendLine($"        }}");
+                break;
         }
     }
 
@@ -421,6 +436,14 @@ public sealed class S7TelegramGenerator : IIncrementalGenerator
             case S7Kind.Raw:
                 sb.AppendLine($"        __r.{f.Name} = data.Slice({offset}, {f.WireSize}).ToArray();");
                 break;
+            case S7Kind.CharArray:
+                sb.AppendLine($"        {{");
+                sb.AppendLine($"            var __ca = new char[{f.WireSize}];");
+                sb.AppendLine($"            for (int __i = 0; __i < {f.WireSize}; __i++)");
+                sb.AppendLine($"                __ca[__i] = (char)data[{offset} + __i];");
+                sb.AppendLine($"            __r.{f.Name} = __ca;");
+                sb.AppendLine($"        }}");
+                break;
         }
     }
 
@@ -435,7 +458,8 @@ public sealed class S7TelegramGenerator : IIncrementalGenerator
         DWord, DInt, Real,
         LWord, LInt, LReal,
         DateAndTime,
-        S7String, S7WString, Raw
+        S7String, S7WString, Raw,
+        CharArray
     }
 
     private sealed record FieldInfo(
@@ -536,6 +560,17 @@ public sealed class S7TelegramGenerator : IIncrementalGenerator
         {
             public S7RawAttribute(int byteCount) => ByteCount = byteCount;
             public int ByteCount { get; }
+        }
+
+        /// <summary>
+        /// Maps a <c>char[]</c> property to a fixed-length array of S7 CHAR values on the wire.
+        /// Each character occupies exactly one byte (ASCII). No length header is written.
+        /// </summary>
+        [System.AttributeUsage(System.AttributeTargets.Property)]
+        public sealed class S7CharArrayAttribute : System.Attribute
+        {
+            public S7CharArrayAttribute(int length) => Length = length;
+            public int Length { get; }
         }
         """;
 }
