@@ -16,6 +16,8 @@ public sealed class TcpPlcClientBuilder
     private TimeSpan _reconnectInterval = TimeSpan.FromSeconds(5);
     private TimeSpan _timeout = TimeSpan.FromSeconds(10);
     private IMessageFramer? _framer;
+    private bool _useLengthFramer;
+    private bool _useTelegramIdFramer;
     private ILogger<TcpPlcClient>? _logger;
     private readonly TelegramRegistry _registry = new();
     private ByteOrder _byteOrder = ByteOrder.BigEndian;
@@ -85,7 +87,9 @@ public sealed class TcpPlcClientBuilder
     /// </remarks>
     public TcpPlcClientBuilder WithLengthPrefixFramer()
     {
-        _framer = new LengthPrefixFramer();
+        _framer              = new LengthPrefixFramer();
+        _useLengthFramer     = false;
+        _useTelegramIdFramer = false;
         return this;
     }
 
@@ -104,7 +108,56 @@ public sealed class TcpPlcClientBuilder
     /// </remarks>
     public TcpPlcClientBuilder WithPayloadLengthFramer()
     {
-        _framer = new PayloadLengthFramer();
+        _framer              = new PayloadLengthFramer();
+        _useLengthFramer     = false;
+        _useTelegramIdFramer = false;
+        return this;
+    }
+
+    /// <summary>
+    /// Use the built-in length framer that reads the total frame length from the <c>[MsgLength]</c>
+    /// field embedded at bytes 2–3 of the telegram payload (immediately after the 2-byte <c>[MsgId]</c>).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Wire format: <c>[TelegramId: UInt16 (2 bytes)][TotalLength: UInt16 (2 bytes)][Data fields…]</c>.
+    /// Both the TelegramId and TotalLength are already part of the serialised telegram payload —
+    /// no external header is added. <c>TotalLength</c> equals the full wire size of the telegram.
+    /// </para>
+    /// <para>
+    /// Use this framer when the PLC's DB block starts with the telegram identifier (<c>[MsgId]</c>)
+    /// immediately followed by the total message length (<c>[MsgLength]</c>).
+    /// </para>
+    /// </remarks>
+    public TcpPlcClientBuilder WithLengthFramer()
+    {
+        _framer              = null;
+        _useLengthFramer     = true;
+        _useTelegramIdFramer = false;
+        return this;
+    }
+
+    /// <summary>
+    /// Use the built-in TelegramId-based framer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The first 2 bytes of every message are the TelegramId (from <c>[MsgId]</c>). The framer
+    /// looks up the expected total wire size for that TelegramId from the registered telegram
+    /// definitions and waits until that many bytes are available.
+    /// </para>
+    /// <para>
+    /// Use this framer when the PLC's DB block starts with the telegram identifier
+    /// (<c>[MsgId]</c>) and all telegram types have a fixed wire size.
+    /// Call <see cref="RegisterTelegram{T}"/> for every telegram type before calling
+    /// <see cref="Build"/> so the framer can resolve frame sizes.
+    /// </para>
+    /// </remarks>
+    public TcpPlcClientBuilder WithTelegramIdFramer()
+    {
+        _framer              = null;
+        _useLengthFramer     = false;
+        _useTelegramIdFramer = true;
         return this;
     }
 
@@ -120,7 +173,9 @@ public sealed class TcpPlcClientBuilder
     /// </param>
     public TcpPlcClientBuilder WithFramer(IMessageFramer framer)
     {
-        _framer = framer;
+        _framer              = framer;
+        _useLengthFramer     = false;
+        _useTelegramIdFramer = false;
         return this;
     }
 
@@ -215,6 +270,9 @@ public sealed class TcpPlcClientBuilder
             ReconnectIntervalMs = (int)_reconnectInterval.TotalMilliseconds,
             TimeoutMs = (int)_timeout.TotalMilliseconds,
         };
-        return new TcpPlcClient(config, _registry, _framer, _logger, _byteOrder);
+        var framer = _useTelegramIdFramer ? new TelegramIdFramer(_registry.Definitions, _byteOrder)
+                   : _useLengthFramer     ? new LengthFramer(_byteOrder)
+                   : _framer;
+        return new TcpPlcClient(config, _registry, framer, _logger, _byteOrder);
     }
 }

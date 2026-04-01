@@ -110,6 +110,20 @@ public sealed class UdpPlcServerBuilder
     }
 
     /// <summary>
+    /// No-op for UDP. UDP datagrams are self-delimited; each received packet is a complete
+    /// message, so no stream-reassembly framing is required. Provided for API consistency
+    /// with the TCP builders.
+    /// </summary>
+    public UdpPlcServerBuilder WithLengthFramer() => this;
+
+    /// <summary>
+    /// No-op for UDP. UDP datagrams are self-delimited; each received packet is a complete
+    /// message, so no stream-reassembly framing is required. Provided for API consistency
+    /// with the TCP builders.
+    /// </summary>
+    public UdpPlcServerBuilder WithTelegramIdFramer() => this;
+
+    /// <summary>
     /// Builds and returns a fully configured <see cref="UdpPlcServer"/>.
     /// Call <see cref="UdpPlcServer.StartAsync"/> on the returned instance to begin
     /// listening for datagrams.
