@@ -28,5 +28,6 @@ public enum S7DataType
     Time,
     TimeOfDay,
     DateAndTime,
-    Raw
+    Raw,
+    CharArray
 }

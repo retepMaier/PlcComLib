@@ -14,4 +14,19 @@ public interface ITelegram
     /// connection's <c>ByteOrder</c> setting.
     /// </summary>
     ushort TelegramId { get; }
+
+    /// <summary>
+    /// The 2-byte message identifier used for message framing and dispatch.
+    /// In source-generated telegrams the value is taken from the <c>[MsgId]</c>
+    /// attribute; the decorated property can have any name.
+    /// </summary>
+    ushort MessageId { get; }
+
+    /// <summary>
+    /// Total wire size of the serialised telegram payload in bytes, including
+    /// the 2-byte message-id header. Used for message framing.
+    /// In source-generated telegrams this is backed by the property decorated
+    /// with <c>[MsgLength]</c>; the decorated property can have any name.
+    /// </summary>
+    int Length { get; }
 }

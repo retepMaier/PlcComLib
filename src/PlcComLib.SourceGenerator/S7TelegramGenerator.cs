@@ -14,6 +14,8 @@ public sealed class S7TelegramGenerator : IIncrementalGenerator
 {
     private const string GenNs = "PlcComLib.SourceGenerator";
     private const string TelegramAttrFqn = "PlcComLib.SourceGenerator.S7TelegramAttribute";
+    private const string MsgIdAttrFqn    = "PlcComLib.SourceGenerator.MsgIdAttribute";
+    private const string MsgLengthAttrFqn = "PlcComLib.SourceGenerator.MsgLengthAttribute";
 
     // ──────────────────────────────────────────────────────────────────────────
     // Initialise pipeline
@@ -65,10 +67,8 @@ public sealed class S7TelegramGenerator : IIncrementalGenerator
         if (telegramAttr is null) return null;
 
         ushort messageId = 0;
-
-        var args = telegramAttr.ConstructorArguments;
-        if (args.Length >= 1 && args[0].Value is not null)
-            messageId = (ushort)System.Convert.ToUInt32(args[0].Value);
+        string? msgIdPropName   = null;
+        string? msgLengthPropName = null;
 
         var fields = new List<FieldInfo>();
         foreach (var member in cls.Members.OfType<PropertyDeclarationSyntax>())
@@ -76,6 +76,28 @@ public sealed class S7TelegramGenerator : IIncrementalGenerator
             ct.ThrowIfCancellationRequested();
             if (ctx.SemanticModel.GetDeclaredSymbol(member, ct) is not IPropertySymbol prop)
                 continue;
+
+            bool isMsgId = false, isMsgLength = false;
+            foreach (var a in prop.GetAttributes())
+            {
+                var attrFqn = a.AttributeClass?.ToDisplayString() ?? "";
+                if (attrFqn == MsgIdAttrFqn)
+                {
+                    isMsgId = true;
+                    if (a.ConstructorArguments.Length >= 1 && a.ConstructorArguments[0].Value is not null)
+                        messageId = (ushort)System.Convert.ToUInt32(a.ConstructorArguments[0].Value);
+                    msgIdPropName = prop.Name;
+                }
+                else if (attrFqn == MsgLengthAttrFqn)
+                {
+                    isMsgLength = true;
+                    msgLengthPropName = prop.Name;
+                }
+            }
+
+            // [MsgId] and [MsgLength] properties are framing markers, not S7 data fields.
+            if (isMsgId || isMsgLength) continue;
+
             var fi = BuildFieldInfo(prop.GetAttributes(), prop.Name);
             if (fi is not null) fields.Add(fi);
         }
@@ -86,7 +108,9 @@ public sealed class S7TelegramGenerator : IIncrementalGenerator
 
         return new TelegramClassInfo(
             symbol.Name, ns, messageId,
-            fields.ToImmutableArray());
+            fields.ToImmutableArray(),
+            msgIdPropName,
+            msgLengthPropName);
     }
 
     private static FieldInfo? BuildFieldInfo(ImmutableArray<AttributeData> attrs, string name)
@@ -159,6 +183,13 @@ public sealed class S7TelegramGenerator : IIncrementalGenerator
                         byteCount = System.Convert.ToInt32(attr.ConstructorArguments[0].Value);
                     return new(name, S7Kind.Raw, "global::PlcComLib.DataTypes.S7DataType.Raw", byteCount, 0, byteCount);
                 }
+                case "S7CharArrayAttribute":
+                {
+                    int length = 0;
+                    if (attr.ConstructorArguments.Length > 0 && attr.ConstructorArguments[0].Value is not null)
+                        length = System.Convert.ToInt32(attr.ConstructorArguments[0].Value);
+                    return new(name, S7Kind.CharArray, "global::PlcComLib.DataTypes.S7DataType.CharArray", length, 0, length);
+                }
             }
         }
         return null;
@@ -192,9 +223,25 @@ public sealed class S7TelegramGenerator : IIncrementalGenerator
         sb.AppendLine($"    public static int WireSize => {totalWireSize};");
         sb.AppendLine();
 
-        // ── ITelegram instance member ─────────────────────────────────────────
+        // ── [MsgId] partial property implementation (any user-chosen name) ────
+        if (info.MsgIdPropName is not null)
+        {
+            sb.AppendLine($"    public partial ushort {info.MsgIdPropName} => MessageId;");
+            sb.AppendLine();
+        }
+
+        // ── [MsgLength] partial property implementation (any user-chosen name) ─
+        if (info.MsgLengthPropName is not null)
+        {
+            sb.AppendLine($"    public partial int {info.MsgLengthPropName} => WireSize;");
+            sb.AppendLine();
+        }
+
+        // ── ITelegram instance members ────────────────────────────────────────
         sb.AppendLine("    /// <summary>The telegram identifier — always the same as the static <see cref=\"MessageId\"/>.</summary>");
         sb.AppendLine("    public ushort TelegramId => MessageId;");
+        sb.AppendLine("    ushort global::PlcComLib.Telegrams.ITelegram.MessageId => MessageId;");
+        sb.AppendLine("    int global::PlcComLib.Telegrams.ITelegram.Length => WireSize;");
         sb.AppendLine();
 
         // ── Definition ────────────────────────────────────────────────────────
@@ -214,7 +261,7 @@ public sealed class S7TelegramGenerator : IIncrementalGenerator
             sb.Append($"                new global::PlcComLib.Telegrams.TelegramField {{ Name = \"{f.Name}\", DataType = {f.DataTypeExpr}");
             if (f.Kind is S7Kind.S7String or S7Kind.S7WString)
                 sb.Append($", MaxStringLength = (byte){System.Math.Min(f.MaxStringLength, 254)}");
-            if (f.Kind == S7Kind.Raw)
+            if (f.Kind is S7Kind.Raw or S7Kind.CharArray)
                 sb.Append($", RawByteCount = {f.RawByteCount}");
             sb.AppendLine(" },");
         }
@@ -323,6 +370,14 @@ public sealed class S7TelegramGenerator : IIncrementalGenerator
             case S7Kind.Raw:
                 sb.AppendLine($"        ({f.Name} ?? global::System.Array.Empty<byte>()).CopyTo(__buf, {offset});");
                 break;
+            case S7Kind.CharArray:
+                sb.AppendLine($"        {{");
+                sb.AppendLine($"            var __ca = {f.Name};");
+                sb.AppendLine($"            int __caLen = __ca?.Length ?? 0;");
+                sb.AppendLine($"            for (int __i = 0; __i < {f.WireSize}; __i++)");
+                sb.AppendLine($"                __buf[{offset} + __i] = __i < __caLen ? (byte)__ca![__i] : (byte)0;");
+                sb.AppendLine($"        }}");
+                break;
         }
     }
 
@@ -381,6 +436,14 @@ public sealed class S7TelegramGenerator : IIncrementalGenerator
             case S7Kind.Raw:
                 sb.AppendLine($"        __r.{f.Name} = data.Slice({offset}, {f.WireSize}).ToArray();");
                 break;
+            case S7Kind.CharArray:
+                sb.AppendLine($"        {{");
+                sb.AppendLine($"            var __ca = new char[{f.WireSize}];");
+                sb.AppendLine($"            for (int __i = 0; __i < {f.WireSize}; __i++)");
+                sb.AppendLine($"                __ca[__i] = (char)data[{offset} + __i];");
+                sb.AppendLine($"            __r.{f.Name} = __ca;");
+                sb.AppendLine($"        }}");
+                break;
         }
     }
 
@@ -395,7 +458,8 @@ public sealed class S7TelegramGenerator : IIncrementalGenerator
         DWord, DInt, Real,
         LWord, LInt, LReal,
         DateAndTime,
-        S7String, S7WString, Raw
+        S7String, S7WString, Raw,
+        CharArray
     }
 
     private sealed record FieldInfo(
@@ -410,7 +474,9 @@ public sealed class S7TelegramGenerator : IIncrementalGenerator
         string ClassName,
         string? Namespace,
         ushort MessageId,
-        ImmutableArray<FieldInfo> Fields)
+        ImmutableArray<FieldInfo> Fields,
+        string? MsgIdPropName,
+        string? MsgLengthPropName)
     {
         public string HintName =>
             Namespace is null ? ClassName : $"{Namespace}.{ClassName}";
@@ -429,19 +495,29 @@ public sealed class S7TelegramGenerator : IIncrementalGenerator
 
         /// <summary>Marks a <c>partial</c> class as a strongly-typed S7 telegram.</summary>
         [System.AttributeUsage(System.AttributeTargets.Class)]
-        public sealed class S7TelegramAttribute : System.Attribute
+        public sealed class S7TelegramAttribute : System.Attribute { }
+
+        /// <summary>
+        /// Marks a <c>partial</c> property as the message-id field for this telegram.
+        /// The decorated property can have any name; the generator reads the <c>messageId</c>
+        /// value from this attribute and uses it for wire framing.
+        /// The property must be declared as <c>public partial ushort YourName { get; }</c>.
+        /// </summary>
+        [System.AttributeUsage(System.AttributeTargets.Property)]
+        public sealed class MsgIdAttribute : System.Attribute
         {
-            /// <param name="messageId">
-            /// Unique 2-byte identifier prepended to every serialised payload (always big-endian).
-            /// The byte order for data fields is configured on the client/server connection via
-            /// <c>WithByteOrder()</c>.
-            /// </param>
-            public S7TelegramAttribute(ushort messageId)
-            {
-                MessageId = messageId;
-            }
+            public MsgIdAttribute(ushort messageId) => MessageId = messageId;
             public ushort MessageId { get; }
         }
+
+        /// <summary>
+        /// Marks a <c>partial</c> property as the wire-length field for this telegram.
+        /// The decorated property can have any name; the generator implements it to return
+        /// the total wire size (including the 2-byte message-id header).
+        /// The property must be declared as <c>public partial int YourName { get; }</c>.
+        /// </summary>
+        [System.AttributeUsage(System.AttributeTargets.Property)]
+        public sealed class MsgLengthAttribute : System.Attribute { }
 
         [System.AttributeUsage(System.AttributeTargets.Property)] public sealed class S7BoolAttribute     : System.Attribute { }
         [System.AttributeUsage(System.AttributeTargets.Property)] public sealed class S7ByteAttribute     : System.Attribute { }
@@ -484,6 +560,17 @@ public sealed class S7TelegramGenerator : IIncrementalGenerator
         {
             public S7RawAttribute(int byteCount) => ByteCount = byteCount;
             public int ByteCount { get; }
+        }
+
+        /// <summary>
+        /// Maps a <c>char[]</c> property to a fixed-length array of S7 CHAR values on the wire.
+        /// Each character occupies exactly one byte (ASCII). No length header is written.
+        /// </summary>
+        [System.AttributeUsage(System.AttributeTargets.Property)]
+        public sealed class S7CharArrayAttribute : System.Attribute
+        {
+            public S7CharArrayAttribute(int length) => Length = length;
+            public int Length { get; }
         }
         """;
 }

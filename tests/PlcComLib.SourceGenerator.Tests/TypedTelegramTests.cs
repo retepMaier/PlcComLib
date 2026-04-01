@@ -9,18 +9,26 @@ namespace PlcComLib.SourceGenerator.Tests;
 
 // ── Inline typed telegram classes (source generator processes these at build time) ──
 
-[S7Telegram(messageId: 0x0001)]
+[S7Telegram]
 public partial class TestStatusTelegram
 {
+    /// <summary>Message identifier — any property name is valid; located by [MsgId].</summary>
+    [MsgId(0x0001)] public partial ushort Id { get; }
+    /// <summary>Wire length — any property name is valid; located by [MsgLength].</summary>
+    [MsgLength]     public partial int    TotalLength { get; }
+
     [S7Word]              public ushort MachineId { get; set; }
     [S7Real]              public float  Speed     { get; set; }
     [S7String(maxLength: 10)] public string Label { get; set; } = "";
 }
 
 /// <summary>Covers every S7 scalar type.</summary>
-[S7Telegram(messageId: 0x0002)]
+[S7Telegram]
 public partial class FullTypeTelegram
 {
+    [MsgId(0x0002)] public partial ushort FrameId { get; }
+    [MsgLength]     public partial int    FrameLength { get; }
+
     [S7Bool]  public bool   BoolVal  { get; set; }
     [S7Byte]  public byte   ByteVal  { get; set; }
     [S7SInt]  public sbyte  SIntVal  { get; set; }
@@ -38,11 +46,26 @@ public partial class FullTypeTelegram
 /// Telegram for a non-PLC device (e.g. a Linux sensor board).
 /// Byte order (little-endian) is now a connection-level setting, not part of the attribute.
 /// </summary>
-[S7Telegram(messageId: 0x0010)]
+[S7Telegram]
 public partial class LittleEndianTelegram
 {
+    [MsgId(0x0010)] public partial ushort MsgIdentifier { get; }
+    [MsgLength]     public partial int    MsgSize { get; }
+
     [S7Word] public ushort DeviceId { get; set; }
     [S7Real] public float  Value    { get; set; }
+}
+
+/// <summary>Telegram with a fixed-length char[] field.</summary>
+[S7Telegram]
+public partial class CharArrayTelegram
+{
+    [MsgId(0x0020)]      public partial ushort PacketId { get; }
+    [MsgLength]          public partial int    PacketLength { get; }
+
+    [S7Word]             public ushort        DeviceId { get; set; }
+    [S7CharArray(8)]     public char[]?       Tag      { get; set; }
+    [S7CharArray(4)]     public char[]?       Code     { get; set; }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -258,5 +281,150 @@ public class TypedTelegramTests
         var def = TestStatusTelegram.Definition;
         def.TelegramId.Should().Be(def.MessageId);
         def.TelegramId.Should().Be(0x0001);
+    }
+
+    // ── 11. [MsgId] flexible property name ───────────────────────────────────
+
+    [Fact]
+    public void MsgId_PartialProperty_ReturnsCorrectValue_ViaFlexibleName()
+    {
+        // 'Id' is the user-chosen name decorated with [MsgId(0x0001)].
+        var t = new TestStatusTelegram();
+        t.Id.Should().Be(0x0001);
+        t.Id.Should().Be(TestStatusTelegram.MessageId);
+    }
+
+    [Fact]
+    public void MsgId_PartialProperty_MatchesITelegramMessageId()
+    {
+        ITelegram t = new TestStatusTelegram();
+        t.MessageId.Should().Be(0x0001);
+        t.MessageId.Should().Be(TestStatusTelegram.MessageId);
+    }
+
+    // ── 12. [MsgLength] flexible property name ────────────────────────────────
+
+    [Fact]
+    public void MsgLength_PartialProperty_ReturnsWireSize_ViaFlexibleName()
+    {
+        // 'TotalLength' is the user-chosen name decorated with [MsgLength].
+        var t = new TestStatusTelegram();
+        t.TotalLength.Should().Be(TestStatusTelegram.WireSize);
+        // 2 (header) + 2 (Word) + 4 (Real) + 12 (S7String maxLen=10)
+        t.TotalLength.Should().Be(20);
+    }
+
+    [Fact]
+    public void MsgLength_PartialProperty_MatchesITelegramLength()
+    {
+        ITelegram t = new TestStatusTelegram();
+        t.Length.Should().Be(TestStatusTelegram.WireSize);
+    }
+
+    // ── 13. char[] (S7CharArray) support ─────────────────────────────────────
+
+    [Fact]
+    public void CharArray_WireSize_IsExactLength()
+    {
+        // 2 (MessageId header) + 2 (DeviceId Word) + 8 (Tag CharArray) + 4 (Code CharArray)
+        const int header   = 2;
+        const int deviceId = 2;
+        const int tag      = 8;
+        const int code     = 4;
+        CharArrayTelegram.WireSize.Should().Be(header + deviceId + tag + code);
+    }
+
+    [Fact]
+    public void CharArray_Serialize_WritesCharsAsBytes()
+    {
+        var t = new CharArrayTelegram
+        {
+            DeviceId = 0x0001,
+            Tag  = new[] { 'H', 'e', 'l', 'l', 'o', '!', '\0', '\0' },
+            Code = new[] { 'A', 'B', 'C', 'D' },
+        };
+        var bytes = t.Serialize();
+
+        // Tag starts at offset 4 (2 header + 2 Word)
+        bytes[4].Should().Be((byte)'H');
+        bytes[5].Should().Be((byte)'e');
+        bytes[6].Should().Be((byte)'l');
+        bytes[7].Should().Be((byte)'l');
+        bytes[8].Should().Be((byte)'o');
+        bytes[9].Should().Be((byte)'!');
+
+        // Code starts at offset 12 (4 + 8)
+        bytes[12].Should().Be((byte)'A');
+        bytes[13].Should().Be((byte)'B');
+        bytes[14].Should().Be((byte)'C');
+        bytes[15].Should().Be((byte)'D');
+    }
+
+    [Fact]
+    public void CharArray_RoundTrip_PreservesAllChars()
+    {
+        var original = new CharArrayTelegram
+        {
+            DeviceId = 0x0042,
+            Tag  = new[] { 'T', 'E', 'S', 'T', '_', 'T', 'A', 'G' },
+            Code = new[] { 'X', '1', '2', '3' },
+        };
+        var bytes    = original.Serialize();
+        var restored = CharArrayTelegram.Deserialize(bytes);
+
+        restored.DeviceId.Should().Be(0x0042);
+        restored.Tag.Should().Equal('T', 'E', 'S', 'T', '_', 'T', 'A', 'G');
+        restored.Code.Should().Equal('X', '1', '2', '3');
+    }
+
+    [Fact]
+    public void CharArray_ShortArray_PaddedWithZeros()
+    {
+        // Provide only 3 chars for an 8-element Tag field
+        var t = new CharArrayTelegram
+        {
+            Tag  = new[] { 'A', 'B', 'C' },
+            Code = new[] { 'Z' },
+        };
+        var bytes = t.Serialize();
+
+        // Tag: 'A','B','C' then 5 zero bytes
+        bytes[4].Should().Be((byte)'A');
+        bytes[5].Should().Be((byte)'B');
+        bytes[6].Should().Be((byte)'C');
+        bytes[7].Should().Be(0);
+        bytes[11].Should().Be(0);
+
+        // Code: 'Z' then 3 zero bytes
+        bytes[12].Should().Be((byte)'Z');
+        bytes[13].Should().Be(0);
+    }
+
+    [Fact]
+    public void CharArray_NullArray_SerializesAsAllZeros()
+    {
+        var t = new CharArrayTelegram { Tag = null, Code = null };
+        var bytes = t.Serialize();
+
+        for (int i = 4; i < 4 + 8 + 4; i++)
+            bytes[i].Should().Be(0, because: $"byte[{i}] should be zero for null char[]");
+    }
+
+    [Fact]
+    public void CharArray_MsgId_ViaDifferentPropertyName()
+    {
+        // PacketId is the user-chosen [MsgId] property name on CharArrayTelegram
+        var t = new CharArrayTelegram();
+        t.PacketId.Should().Be(0x0020);
+        ((ITelegram)t).MessageId.Should().Be(0x0020);
+    }
+
+    [Fact]
+    public void CharArray_MsgLength_ViaDifferentPropertyName()
+    {
+        // PacketLength is the user-chosen [MsgLength] property name on CharArrayTelegram
+        var t = new CharArrayTelegram();
+        t.PacketLength.Should().Be(CharArrayTelegram.WireSize);
+        ((ITelegram)t).Length.Should().Be(CharArrayTelegram.WireSize);
     }
 }
