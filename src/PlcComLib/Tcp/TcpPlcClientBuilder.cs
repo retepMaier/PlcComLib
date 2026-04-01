@@ -121,18 +121,7 @@ public sealed class TcpPlcClientBuilder
         return this;
     }
 
-    /// <summary>
-    /// Sets the TelegramId for the most recently registered telegram.
-    /// The id is written as the first field of every serialised payload
-    /// and used to route incoming messages to the correct handler.
-    /// </summary>
-    /// <param name="messageId">Numeric identifier for this telegram type. Any numeric value is accepted.</param>
-    public TcpPlcClientBuilder WithMessageId(long messageId)
-    {
-        if (_lastRegisteredDef is not null)
-            _lastRegisteredDef.MessageId = messageId;
-        return this;
-    }
+    
 
     /// <summary>
     /// Sets the TelegramId for the most recently registered telegram, together with the
@@ -157,18 +146,7 @@ public sealed class TcpPlcClientBuilder
         return this;
     }
 
-    /// <summary>
-    /// Sets the expected total wire size (in bytes) for the most recently registered telegram.
-    /// Used by the <see cref="TelegramIdFramer"/> to determine message boundaries.
-    /// For source-generated telegrams, pass <c>T.WireSize</c>.
-    /// </summary>
-    /// <param name="wireSize">Total wire size including all header fields. Any numeric value is accepted.</param>
-    public TcpPlcClientBuilder WithLength(long wireSize)
-    {
-        if (_lastRegisteredDef is not null)
-            _lastRegisteredDef.ConfiguredWireSize = (int)wireSize;
-        return this;
-    }
+
 
     /// <summary>
     /// Sets the expected total wire size for the most recently registered telegram and

@@ -17,8 +17,7 @@ public static class S7TypeConverter
         };
     }
 
-    public static byte[] Serialize(S7DataType dataType, object value, byte maxStringLength = 0,
-        ByteOrder byteOrder = ByteOrder.BigEndian)
+    public static byte[] Serialize(S7DataType dataType, object value, byte maxStringLength = 0,ByteOrder byteOrder = ByteOrder.BigEndian)
     {
         if (dataType == S7DataType.S7String)
         {
@@ -48,8 +47,7 @@ public static class S7TypeConverter
         return bytes;
     }
 
-    public static object Deserialize(S7DataType dataType, ReadOnlySpan<byte> source,
-        ByteOrder byteOrder = ByteOrder.BigEndian)
+    public static object Deserialize(S7DataType dataType, ReadOnlySpan<byte> source,ByteOrder byteOrder = ByteOrder.BigEndian)
     {
         if (dataType == S7DataType.S7String) return S7String.ReadFrom(source);
         if (dataType == S7DataType.S7WString) return S7WString.ReadFrom(source);

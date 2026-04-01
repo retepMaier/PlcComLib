@@ -3,16 +3,11 @@ namespace PlcComLib.Telegrams;
 /// <summary>
 /// A runtime telegram instance with typed field values.
 /// </summary>
-public sealed class Telegram
+public sealed class Telegram(TelegramDefinition definition)
 {
-    private readonly Dictionary<string, object> _fields = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, object> _fields = [];
 
-    public Telegram(TelegramDefinition definition)
-    {
-        Definition = definition ?? throw new ArgumentNullException(nameof(definition));
-    }
-
-    public TelegramDefinition Definition { get; }
+    public TelegramDefinition Definition { get; } = definition ?? throw new ArgumentNullException(nameof(definition));
 
     public T GetValue<T>(string fieldName)
     {

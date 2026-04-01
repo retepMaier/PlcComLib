@@ -8,8 +8,7 @@ namespace PlcComLib.Telegrams;
 /// </summary>
 public static class TelegramSerializer
 {
-    public static byte[] Serialize(Telegram telegram,
-        ByteOrder byteOrder = ByteOrder.BigEndian)
+    public static byte[] Serialize(Telegram telegram,ByteOrder byteOrder = ByteOrder.BigEndian)
     {
         ArgumentNullException.ThrowIfNull(telegram);
         var def = telegram.Definition;
@@ -26,8 +25,7 @@ public static class TelegramSerializer
         return buffer;
     }
 
-    public static Telegram Deserialize(TelegramDefinition definition, ReadOnlySpan<byte> data,
-        ByteOrder byteOrder = ByteOrder.BigEndian)
+    public static Telegram Deserialize(TelegramDefinition definition, ReadOnlySpan<byte> data,ByteOrder byteOrder = ByteOrder.BigEndian)
     {
         ArgumentNullException.ThrowIfNull(definition);
         var telegram = new Telegram(definition);

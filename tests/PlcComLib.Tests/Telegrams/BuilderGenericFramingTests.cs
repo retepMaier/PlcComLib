@@ -81,25 +81,7 @@ public class BuilderGenericFramingTests
         def.LengthDataType.Should().Be(S7DataType.Word);
     }
 
-    // ── Backward-compat scalar overloads still work ───────────────────────────
-
-    [Fact]
-    public void TcpClient_WithMessageId_Scalar_StillWorks()
-    {
-        var def = new PlcComLib.Telegrams.TelegramDefinition { Id = "T1" };
-
-        new TcpPlcClientBuilder()
-            .ConnectTo("127.0.0.1", 2000)
-            .RegisterTelegram(def)
-            .WithMessageId(0x0007)
-            .WithLength(20);
-
-        def.MessageId.Should().Be(0x0007);
-        def.ConfiguredWireSize.Should().Be(20);
-        // Scalar overloads do not set offsets — defaults apply
-        def.MessageIdByteOffset.Should().Be(0);
-        def.LengthByteOffset.Should().Be(-1);
-    }
+    
 
     // ── Wider numeric id types — DWord, LWord, int, uint ──────────────────────
 
@@ -148,19 +130,7 @@ public class BuilderGenericFramingTests
         def.MessageIdDataType.Should().Be(S7DataType.Int);
     }
 
-    [Fact]
-    public void TcpClient_WithLength_AcceptsUshortValue()
-    {
-        var def = new PlcComLib.Telegrams.TelegramDefinition { Id = "T1", MessageId = 0x0001 };
-        ushort wireSize = 16;
-
-        new TcpPlcClientBuilder()
-            .ConnectTo("127.0.0.1", 2000)
-            .RegisterTelegram(def)
-            .WithLength(wireSize);
-
-        def.ConfiguredWireSize.Should().Be(16);
-    }
+    
 
     [Fact]
     public void TcpClient_WithLength_Generic_AcceptsUshortValue()
@@ -177,19 +147,7 @@ public class BuilderGenericFramingTests
         def.LengthDataType.Should().Be(S7DataType.Word);
     }
 
-    [Fact]
-    public void TcpClient_WithMessageId_Scalar_AcceptsIntVariable()
-    {
-        var def = new PlcComLib.Telegrams.TelegramDefinition { Id = "T1" };
-        int id = 0x0001;
-
-        new TcpPlcClientBuilder()
-            .ConnectTo("127.0.0.1", 2000)
-            .RegisterTelegram(def)
-            .WithMessageId(id);
-
-        def.MessageId.Should().Be(id);
-    }
+    
 
     // ── Framer correctly reads DWord-sized IDs from the wire ──────────────────
 

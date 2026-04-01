@@ -11,13 +11,14 @@ namespace PlcComLib.Udp;
 /// <summary>
 /// UDP server that listens on a local endpoint and dispatches incoming datagrams. Thread-safe.
 /// </summary>
-public sealed class UdpPlcServer : IPlcConnection
+public sealed class UdpPlcServer(
+    ConnectionConfiguration config,
+    TelegramRegistry registry,
+    ILogger<UdpPlcServer>? logger = null,
+    ByteOrder byteOrder = ByteOrder.BigEndian) : IPlcConnection
 {
-    private readonly ConnectionConfiguration _config;
-    private readonly TelegramRegistry _registry;
-    private readonly ILogger<UdpPlcServer>? _logger;
-    private readonly ByteOrder _byteOrder;
-
+    private readonly ConnectionConfiguration _config = config ?? throw new ArgumentNullException(nameof(config));
+    private readonly TelegramRegistry _registry = registry ?? throw new ArgumentNullException(nameof(registry));
     private UdpClient? _udpClient;
     private IPEndPoint? _lastSenderEndpoint;
     private CancellationTokenSource? _cts;
@@ -43,18 +44,6 @@ public sealed class UdpPlcServer : IPlcConnection
 
     public bool IsConnected => _isConnected;
 
-    public UdpPlcServer(
-        ConnectionConfiguration config,
-        TelegramRegistry registry,
-        ILogger<UdpPlcServer>? logger = null,
-        ByteOrder byteOrder = ByteOrder.BigEndian)
-    {
-        _config    = config   ?? throw new ArgumentNullException(nameof(config));
-        _registry  = registry ?? throw new ArgumentNullException(nameof(registry));
-        _logger    = logger;
-        _byteOrder = byteOrder;
-    }
-
     // ── Lifecycle ─────────────────────────────────────────────────────────────
 
     public Task StartAsync(CancellationToken cancellationToken = default)
@@ -65,7 +54,7 @@ public sealed class UdpPlcServer : IPlcConnection
         _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _isConnected = true;
         ConnectionStateChanged?.Invoke(this, new ConnectionStateChangedEventArgs(true, "UDP server started"));
-        _logger?.LogInformation("UDP server listening on {Host}:{Port}", _config.Host, _config.Port);
+        logger?.LogInformation("UDP server listening on {Host}:{Port}", _config.Host, _config.Port);
         _receiveTask = ReceiveLoopAsync(_cts.Token);
         return Task.CompletedTask;
     }
@@ -90,17 +79,16 @@ public sealed class UdpPlcServer : IPlcConnection
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (!_isConnected || _udpClient == null) throw new InvalidOperationException("UDP server is not started.");
         if (_lastSenderEndpoint == null)          throw new InvalidOperationException("No sender endpoint available yet.");
-        await SendToEndpointAsync(TelegramSerializer.Serialize(telegram, _byteOrder), _lastSenderEndpoint, cancellationToken);
+        await SendToEndpointAsync(TelegramSerializer.Serialize(telegram, byteOrder), _lastSenderEndpoint, cancellationToken);
     }
 
     /// <summary>Sends a strongly-typed telegram to the last sender (reply).</summary>
-    public async Task SendAsync<T>(T telegram, CancellationToken cancellationToken = default)
-        where T : ITypedS7Telegram<T>
+    public async Task SendAsync<T>(T telegram, CancellationToken cancellationToken = default)where T : ITypedS7Telegram<T>
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (!_isConnected || _udpClient == null) throw new InvalidOperationException("UDP server is not started.");
         if (_lastSenderEndpoint == null)          throw new InvalidOperationException("No sender endpoint available yet.");
-        await SendToEndpointAsync(telegram.Serialize(_byteOrder), _lastSenderEndpoint, cancellationToken);
+        await SendToEndpointAsync(telegram.Serialize(byteOrder), _lastSenderEndpoint, cancellationToken);
     }
 
     /// <summary>Sends a legacy untyped telegram to a specific endpoint.</summary>
@@ -108,16 +96,15 @@ public sealed class UdpPlcServer : IPlcConnection
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (!_isConnected || _udpClient == null) throw new InvalidOperationException("UDP server is not started.");
-        await SendToEndpointAsync(TelegramSerializer.Serialize(telegram, _byteOrder), endpoint, cancellationToken);
+        await SendToEndpointAsync(TelegramSerializer.Serialize(telegram, byteOrder), endpoint, cancellationToken);
     }
 
     /// <summary>Sends a strongly-typed telegram to a specific endpoint.</summary>
-    public async Task SendToAsync<T>(IPEndPoint endpoint, T telegram, CancellationToken cancellationToken = default)
-        where T : ITypedS7Telegram<T>
+    public async Task SendToAsync<T>(IPEndPoint endpoint, T telegram, CancellationToken cancellationToken = default)where T : ITypedS7Telegram<T>
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (!_isConnected || _udpClient == null) throw new InvalidOperationException("UDP server is not started.");
-        await SendToEndpointAsync(telegram.Serialize(_byteOrder), endpoint, cancellationToken);
+        await SendToEndpointAsync(telegram.Serialize(byteOrder), endpoint, cancellationToken);
     }
 
     private async Task SendToEndpointAsync(byte[] payload, IPEndPoint endpoint, CancellationToken ct)
@@ -138,15 +125,14 @@ public sealed class UdpPlcServer : IPlcConnection
     /// whenever a datagram whose MessageId matches <typeparamref name="T"/>.<c>MessageId</c> arrives.
     /// Uses static abstract interface members — zero reflection.
     /// </summary>
-    public IDisposable Subscribe<T>(Action<T> handler)
-        where T : ITypedS7Telegram<T>
+    public IDisposable Subscribe<T>(Action<T> handler)where T : ITypedS7Telegram<T>
     {
         EventHandler<TelegramReceivedEventArgs> listener = (_, e) =>
         {
             var def = T.Definition;
             if (!MatchesMessageId(e.RawPayload, def)) return;
-            try   { handler(T.Deserialize(e.RawPayload, _byteOrder)); }
-            catch (Exception ex) { _logger?.LogWarning(ex, "Typed handler for {T} threw.", typeof(T).Name); }
+            try   { handler(T.Deserialize(e.RawPayload, byteOrder)); }
+            catch (Exception ex) { logger?.LogWarning(ex, "Typed handler for {T} threw.", typeof(T).Name); }
         };
         TelegramReceived += listener;
         return new Subscription(() => TelegramReceived -= listener);
@@ -158,15 +144,14 @@ public sealed class UdpPlcServer : IPlcConnection
     /// The handler receives the deserialised telegram plus the remote IP address and port.
     /// Uses static abstract interface members — zero reflection.
     /// </summary>
-    public IDisposable Subscribe<T>(Action<T, string, int> handler)
-        where T : ITypedS7Telegram<T>
+    public IDisposable Subscribe<T>(Action<T, string, int> handler)where T : ITypedS7Telegram<T>
     {
         EventHandler<TelegramReceivedEventArgs> listener = (_, e) =>
         {
             var def = T.Definition;
             if (!MatchesMessageId(e.RawPayload, def)) return;
-            try   { handler(T.Deserialize(e.RawPayload, _byteOrder), e.RemoteAddress, e.Port); }
-            catch (Exception ex) { _logger?.LogWarning(ex, "Typed handler for {T} threw.", typeof(T).Name); }
+            try   { handler(T.Deserialize(e.RawPayload, byteOrder), e.RemoteAddress, e.Port); }
+            catch (Exception ex) { logger?.LogWarning(ex, "Typed handler for {T} threw.", typeof(T).Name); }
         };
         TelegramReceived += listener;
         return new Subscription(() => TelegramReceived -= listener);
@@ -183,7 +168,7 @@ public sealed class UdpPlcServer : IPlcConnection
             catch (OperationCanceledException) { break; }
             catch (Exception ex)
             {
-                _logger?.LogWarning(ex, "UDP receive error.");
+                logger?.LogWarning(ex, "UDP receive error.");
                 break;
             }
             _lastSenderEndpoint = result.RemoteEndPoint;
@@ -219,10 +204,10 @@ public sealed class UdpPlcServer : IPlcConnection
         }
 
         // 3. No match — raise UnknownTelegramReceived
-        _logger?.LogWarning(
+        logger?.LogWarning(
             "No matching UDP telegram definition for payload of {Length} bytes.",
             payload.Length);
-        UnknownTelegramReceived?.Invoke(this, new UnknownTelegramEventArgs(payload, _byteOrder));
+        UnknownTelegramReceived?.Invoke(this, new UnknownTelegramEventArgs(payload, byteOrder));
     }
 
     /// <summary>
@@ -238,20 +223,20 @@ public sealed class UdpPlcServer : IPlcConnection
         int fieldEnd = def.LengthByteOffset + S7TypeConverter.GetWireSize(def.LengthDataType);
         if (payload.Length < fieldEnd)
         {
-            _logger?.LogWarning(
+            logger?.LogWarning(
                 "UDP telegram '{Id}': length field at offset {Offset} extends beyond payload ({PayloadLen} bytes).",
                 def.Id, def.LengthByteOffset, payload.Length);
-            UnknownTelegramReceived?.Invoke(this, new UnknownTelegramEventArgs(payload, _byteOrder));
+            UnknownTelegramReceived?.Invoke(this, new UnknownTelegramEventArgs(payload, byteOrder));
             return false;
         }
 
-        long receivedLength = TelegramIdFramer.ReadLength(payload, def.LengthByteOffset, def.LengthDataType, _byteOrder);
+        long receivedLength = TelegramIdFramer.ReadLength(payload, def.LengthByteOffset, def.LengthDataType, byteOrder);
         if (receivedLength != def.ConfiguredWireSize)
         {
-            _logger?.LogWarning(
+            logger?.LogWarning(
                 "UDP telegram '{Id}': length field mismatch — expected {Expected}, got {Received}.",
                 def.Id, def.ConfiguredWireSize, receivedLength);
-            UnknownTelegramReceived?.Invoke(this, new UnknownTelegramEventArgs(payload, _byteOrder));
+            UnknownTelegramReceived?.Invoke(this, new UnknownTelegramEventArgs(payload, byteOrder));
             return false;
         }
 
@@ -262,12 +247,12 @@ public sealed class UdpPlcServer : IPlcConnection
     {
         try
         {
-            var telegram = TelegramSerializer.Deserialize(def, payload, _byteOrder);
+            var telegram = TelegramSerializer.Deserialize(def, payload, byteOrder);
             TelegramReceived?.Invoke(this, new TelegramReceivedEventArgs(telegram, payload, remoteAddress, port));
         }
         catch (Exception ex)
         {
-            _logger?.LogWarning(ex, "Failed to deserialize UDP telegram '{Id}'.", def.Id);
+            logger?.LogWarning(ex, "Failed to deserialize UDP telegram '{Id}'.", def.Id);
         }
     }
 
@@ -277,7 +262,7 @@ public sealed class UdpPlcServer : IPlcConnection
         int minBytes = def.MessageIdByteOffset + idSize;
         if (payload.Length < minBytes) return false;
 
-        long actual = TelegramIdFramer.ReadId(payload, def.MessageIdByteOffset, def.MessageIdDataType, _byteOrder);
+        long actual = TelegramIdFramer.ReadId(payload, def.MessageIdByteOffset, def.MessageIdDataType, byteOrder);
         return actual == def.MessageId;
     }
 

@@ -78,8 +78,7 @@ public sealed class UdpPlcServerBuilder
     /// <param name="messageId">Numeric identifier for this telegram type. Any numeric value is accepted.</param>
     public UdpPlcServerBuilder WithMessageId(long messageId)
     {
-        if (_lastRegisteredDef is not null)
-            _lastRegisteredDef.MessageId = messageId;
+        _lastRegisteredDef?.MessageId = messageId;
         return this;
     }
 
@@ -94,8 +93,7 @@ public sealed class UdpPlcServerBuilder
     /// </typeparam>
     /// <param name="id">Expected id value for this telegram type. Any numeric value is accepted.</param>
     /// <param name="byteOffset">Zero-based byte offset in the payload where the id is located.</param>
-    public UdpPlcServerBuilder WithMessageId<TType>(long id, int byteOffset)
-        where TType : IS7FramingType
+    public UdpPlcServerBuilder WithMessageId<TType>(long id, int byteOffset)where TType : IS7FramingType
     {
         if (_lastRegisteredDef is not null)
         {
@@ -113,8 +111,7 @@ public sealed class UdpPlcServerBuilder
     /// <param name="wireSize">Total wire size. Any numeric value is accepted.</param>
     public UdpPlcServerBuilder WithLength(long wireSize)
     {
-        if (_lastRegisteredDef is not null)
-            _lastRegisteredDef.ConfiguredWireSize = (int)wireSize;
+        _lastRegisteredDef?.ConfiguredWireSize = (int)wireSize;
         return this;
     }
 

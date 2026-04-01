@@ -86,8 +86,7 @@ public sealed class UdpPlcClientBuilder
     /// <param name="messageId">Numeric identifier for this telegram type. Any numeric value is accepted.</param>
     public UdpPlcClientBuilder WithMessageId(long messageId)
     {
-        if (_lastRegisteredDef is not null)
-            _lastRegisteredDef.MessageId = messageId;
+        _lastRegisteredDef?.MessageId = messageId;
         return this;
     }
 

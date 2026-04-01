@@ -12,14 +12,16 @@ namespace PlcComLib.Tcp;
 /// Supports automatic reconnection, message framing, typed telegrams, and full-duplex communication.
 /// This class is thread-safe.
 /// </summary>
-public sealed class TcpPlcClient : IPlcConnection
+public sealed class TcpPlcClient(
+    ConnectionConfiguration config,
+    TelegramRegistry registry,
+    IMessageFramer? framer = null,
+    ILogger<TcpPlcClient>? logger = null,
+    ByteOrder byteOrder = ByteOrder.BigEndian) : IPlcConnection
 {
-    private readonly ConnectionConfiguration _config;
-    private readonly TelegramRegistry _registry;
-    private readonly IMessageFramer _framer;
-    private readonly ILogger<TcpPlcClient>? _logger;
-    private readonly ByteOrder _byteOrder;
-
+    private readonly ConnectionConfiguration _config = config ?? throw new ArgumentNullException(nameof(config));
+    private readonly TelegramRegistry _registry = registry ?? throw new ArgumentNullException(nameof(registry));
+    private readonly IMessageFramer _framer = framer ?? new TelegramIdFramer(registry.Definitions, byteOrder);
     private TcpClient? _client;
     private NetworkStream? _stream;
     private CancellationTokenSource? _cts;
@@ -44,20 +46,6 @@ public sealed class TcpPlcClient : IPlcConnection
     public event EventHandler<RawBytesEventArgs>? RawBytesReceived;
 
     public bool IsConnected => _isConnected;
-
-    public TcpPlcClient(
-        ConnectionConfiguration config,
-        TelegramRegistry registry,
-        IMessageFramer? framer = null,
-        ILogger<TcpPlcClient>? logger = null,
-        ByteOrder byteOrder = ByteOrder.BigEndian)
-    {
-        _config    = config   ?? throw new ArgumentNullException(nameof(config));
-        _registry  = registry ?? throw new ArgumentNullException(nameof(registry));
-        _framer    = framer   ?? new TelegramIdFramer(registry.Definitions, byteOrder);
-        _logger    = logger;
-        _byteOrder = byteOrder;
-    }
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
 
@@ -86,7 +74,7 @@ public sealed class TcpPlcClient : IPlcConnection
         if (!_isConnected || _stream == null)
             throw new InvalidOperationException("Not connected.");
 
-        var payload = TelegramSerializer.Serialize(telegram, _byteOrder);
+        var payload = TelegramSerializer.Serialize(telegram, byteOrder);
         await SendFramedAsync(payload, cancellationToken);
     }
 
@@ -98,7 +86,7 @@ public sealed class TcpPlcClient : IPlcConnection
         if (!_isConnected || _stream == null)
             throw new InvalidOperationException("Not connected.");
 
-        await SendFramedAsync(telegram.Serialize(_byteOrder), cancellationToken);
+        await SendFramedAsync(telegram.Serialize(byteOrder), cancellationToken);
     }
 
     private async Task SendFramedAsync(byte[] payload, CancellationToken ct)
@@ -125,17 +113,15 @@ public sealed class TcpPlcClient : IPlcConnection
     /// Uses static abstract interface members — zero reflection.
     /// </summary>
     /// <returns>An <see cref="IDisposable"/> that unsubscribes when disposed.</returns>
-    public IDisposable Subscribe<T>(Action<T> handler)
-        where T : ITypedS7Telegram<T>
+    public IDisposable Subscribe<T>(Action<T> handler) where T : ITypedS7Telegram<T>
     {
         EventHandler<TelegramReceivedEventArgs> listener = (_, e) =>
         {
             var def = T.Definition;
             if (!MatchesMessageId(e.RawPayload, def)) return;
-            try   { handler(T.Deserialize(e.RawPayload, _byteOrder)); }
-            catch (Exception ex) { _logger?.LogWarning(ex, "Typed handler for {T} threw.", typeof(T).Name); }
+            try { handler(T.Deserialize(e.RawPayload, byteOrder)); }
+            catch (Exception ex) { logger?.LogWarning(ex, "Typed handler for {T} threw.", typeof(T).Name); }
         };
-
         TelegramReceived += listener;
         return new Subscription(() => TelegramReceived -= listener);
     }
@@ -147,17 +133,15 @@ public sealed class TcpPlcClient : IPlcConnection
     /// Uses static abstract interface members — zero reflection.
     /// </summary>
     /// <returns>An <see cref="IDisposable"/> that unsubscribes when disposed.</returns>
-    public IDisposable Subscribe<T>(Action<T, string, int> handler)
-        where T : ITypedS7Telegram<T>
+    public IDisposable Subscribe<T>(Action<T, string, int> handler) where T : ITypedS7Telegram<T>
     {
         EventHandler<TelegramReceivedEventArgs> listener = (_, e) =>
         {
             var def = T.Definition;
             if (!MatchesMessageId(e.RawPayload, def)) return;
-            try   { handler(T.Deserialize(e.RawPayload, _byteOrder), e.RemoteAddress, e.Port); }
-            catch (Exception ex) { _logger?.LogWarning(ex, "Typed handler for {T} threw.", typeof(T).Name); }
+            try { handler(T.Deserialize(e.RawPayload, byteOrder), e.RemoteAddress, e.Port); }
+            catch (Exception ex) { logger?.LogWarning(ex, "Typed handler for {T} threw.", typeof(T).Name); }
         };
-
         TelegramReceived += listener;
         return new Subscription(() => TelegramReceived -= listener);
     }
@@ -170,9 +154,9 @@ public sealed class TcpPlcClient : IPlcConnection
         {
             try
             {
-                _logger?.LogInformation("Connecting to {Host}:{Port}...", _config.Host, _config.Port);
+                logger?.LogInformation("Connecting to {Host}:{Port}...", _config.Host, _config.Port);
                 _client = new TcpClient();
-                _client.SendTimeout    = _config.TimeoutMs;
+                _client.SendTimeout = _config.TimeoutMs;
                 _client.ReceiveTimeout = _config.TimeoutMs;
                 await _client.ConnectAsync(_config.Host, _config.Port, ct);
                 _stream = _client.GetStream();
@@ -185,7 +169,7 @@ public sealed class TcpPlcClient : IPlcConnection
             }
             catch (Exception ex)
             {
-                _logger?.LogWarning(ex, "Connection to {Host}:{Port} failed. Retrying in {Interval} ms.",
+                logger?.LogWarning(ex, "Connection to {Host}:{Port} failed. Retrying in {Interval} ms.",
                     _config.Host, _config.Port, _config.ReconnectIntervalMs);
             }
             finally
@@ -203,7 +187,7 @@ public sealed class TcpPlcClient : IPlcConnection
 
     private async Task ReceiveLoopAsync(CancellationToken ct)
     {
-        var buffer      = new byte[65536];
+        var buffer = new byte[65536];
         var accumulated = new System.IO.MemoryStream();
 
         while (!ct.IsCancellationRequested && _stream != null)
@@ -215,13 +199,13 @@ public sealed class TcpPlcClient : IPlcConnection
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                _logger?.LogWarning(ex, "Read error on TCP stream.");
+                logger?.LogWarning(ex, "Read error on TCP stream.");
                 break;
             }
 
             if (bytesRead == 0)
             {
-                _logger?.LogInformation("Remote endpoint closed the connection.");
+                logger?.LogInformation("Remote endpoint closed the connection.");
                 break;
             }
 
@@ -239,7 +223,20 @@ public sealed class TcpPlcClient : IPlcConnection
         while (true)
         {
             var data = accumulated.ToArray();
-            if (!_framer.TryExtract(data, out var message, out int consumed)) break;
+            if (!_framer.TryExtract(data, out var message, out int consumed))
+            {
+                if (consumed > 0)
+                {
+                    // Definite ID mismatch — discard unrecognised byte(s) and keep scanning.
+                    logger?.LogWarning(
+                        "Unrecognised telegram ID in receive buffer; discarding {Count} byte(s).", consumed);
+                    int rem = data.Length - consumed;
+                    accumulated.SetLength(0);
+                    if (rem > 0) accumulated.Write(data, consumed, rem);
+                    continue;
+                }
+                break; // Insufficient data — wait for more bytes.
+            }
 
             int remaining = data.Length - consumed;
             accumulated.SetLength(0);
@@ -276,10 +273,10 @@ public sealed class TcpPlcClient : IPlcConnection
         }
 
         // 3. No match — raise UnknownTelegramReceived
-        _logger?.LogWarning(
+        logger?.LogWarning(
             "No matching telegram definition for payload of {Length} bytes.",
             payload.Length);
-        UnknownTelegramReceived?.Invoke(this, new UnknownTelegramEventArgs(payload, _byteOrder));
+        UnknownTelegramReceived?.Invoke(this, new UnknownTelegramEventArgs(payload, byteOrder));
     }
 
     /// <summary>
@@ -295,20 +292,20 @@ public sealed class TcpPlcClient : IPlcConnection
         int fieldEnd = def.LengthByteOffset + S7TypeConverter.GetWireSize(def.LengthDataType);
         if (payload.Length < fieldEnd)
         {
-            _logger?.LogWarning(
+            logger?.LogWarning(
                 "Telegram '{Id}': length field at offset {Offset} extends beyond payload ({PayloadLen} bytes).",
                 def.Id, def.LengthByteOffset, payload.Length);
-            UnknownTelegramReceived?.Invoke(this, new UnknownTelegramEventArgs(payload, _byteOrder));
+            UnknownTelegramReceived?.Invoke(this, new UnknownTelegramEventArgs(payload, byteOrder));
             return false;
         }
 
-        long receivedLength = TelegramIdFramer.ReadLength(payload, def.LengthByteOffset, def.LengthDataType, _byteOrder);
+        long receivedLength = TelegramIdFramer.ReadLength(payload, def.LengthByteOffset, def.LengthDataType, byteOrder);
         if (receivedLength != def.ConfiguredWireSize)
         {
-            _logger?.LogWarning(
+            logger?.LogWarning(
                 "Telegram '{Id}': length field mismatch — expected {Expected}, got {Received}.",
                 def.Id, def.ConfiguredWireSize, receivedLength);
-            UnknownTelegramReceived?.Invoke(this, new UnknownTelegramEventArgs(payload, _byteOrder));
+            UnknownTelegramReceived?.Invoke(this, new UnknownTelegramEventArgs(payload, byteOrder));
             return false;
         }
 
@@ -319,12 +316,12 @@ public sealed class TcpPlcClient : IPlcConnection
     {
         try
         {
-            var telegram = TelegramSerializer.Deserialize(def, payload, _byteOrder);
+            var telegram = TelegramSerializer.Deserialize(def, payload, byteOrder);
             TelegramReceived?.Invoke(this, new TelegramReceivedEventArgs(telegram, payload, remoteAddress, port));
         }
         catch (Exception ex)
         {
-            _logger?.LogWarning(ex, "Failed to deserialize telegram '{Id}'.", def.Id);
+            logger?.LogWarning(ex, "Failed to deserialize telegram '{Id}'.", def.Id);
         }
     }
 
@@ -338,11 +335,11 @@ public sealed class TcpPlcClient : IPlcConnection
     /// </summary>
     private bool MatchesMessageId(byte[] payload, TelegramDefinition def)
     {
-        int idSize   = S7TypeConverter.GetWireSize(def.MessageIdDataType);
+        int idSize = S7TypeConverter.GetWireSize(def.MessageIdDataType);
         int minBytes = def.MessageIdByteOffset + idSize;
         if (payload.Length < minBytes) return false;
 
-        long actual = TelegramIdFramer.ReadId(payload, def.MessageIdByteOffset, def.MessageIdDataType, _byteOrder);
+        long actual = TelegramIdFramer.ReadId(payload, def.MessageIdByteOffset, def.MessageIdDataType, byteOrder);
         return actual == def.MessageId;
     }
 
@@ -350,7 +347,7 @@ public sealed class TcpPlcClient : IPlcConnection
     {
         _isConnected = connected;
         ConnectionStateChanged?.Invoke(this, new ConnectionStateChangedEventArgs(connected, reason));
-        _logger?.LogInformation("Connection state: {State} ({Reason})",
+        logger?.LogInformation("Connection state: {State} ({Reason})",
             connected ? "Connected" : "Disconnected", reason);
     }
 

@@ -126,8 +126,7 @@ public sealed class TcpPlcServerBuilder
     /// <param name="messageId">Numeric identifier for this telegram type. Any numeric value is accepted.</param>
     public TcpPlcServerBuilder WithMessageId(long messageId)
     {
-        if (_lastRegisteredDef is not null)
-            _lastRegisteredDef.MessageId = messageId;
+        _lastRegisteredDef?.MessageId = messageId;
         return this;
     }
 
@@ -162,8 +161,7 @@ public sealed class TcpPlcServerBuilder
     /// <param name="wireSize">Total wire size. Any numeric value is accepted.</param>
     public TcpPlcServerBuilder WithLength(long wireSize)
     {
-        if (_lastRegisteredDef is not null)
-            _lastRegisteredDef.ConfiguredWireSize = (int)wireSize;
+        _lastRegisteredDef?.ConfiguredWireSize = (int)wireSize;
         return this;
     }
 

@@ -6,8 +6,7 @@ namespace PlcComLib.Telegrams;
 /// </summary>
 public sealed class TelegramRegistry
 {
-    private readonly Dictionary<string, TelegramDefinition> _definitions =
-        new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, TelegramDefinition> _definitions =[];
 
     /// <summary>Registers a telegram definition. Overwrites any existing entry with the same Id.</summary>
     public void Register(TelegramDefinition definition)
