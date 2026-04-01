@@ -144,7 +144,7 @@ public sealed class UdpPlcServer : IPlcConnection
         EventHandler<TelegramReceivedEventArgs> listener = (_, e) =>
         {
             if (e.RawPayload.Length < 2) return;
-            if (ReadTelegramId(e.RawPayload) != T.MessageId) return;
+            if (ReadTelegramId(e.RawPayload) != T.Definition.MessageId) return;
             try   { handler(T.Deserialize(e.RawPayload, _byteOrder)); }
             catch (Exception ex) { _logger?.LogWarning(ex, "Typed handler for {T} threw.", typeof(T).Name); }
         };
@@ -164,7 +164,7 @@ public sealed class UdpPlcServer : IPlcConnection
         EventHandler<TelegramReceivedEventArgs> listener = (_, e) =>
         {
             if (e.RawPayload.Length < 2) return;
-            if (ReadTelegramId(e.RawPayload) != T.MessageId) return;
+            if (ReadTelegramId(e.RawPayload) != T.Definition.MessageId) return;
             try   { handler(T.Deserialize(e.RawPayload, _byteOrder), e.RemoteAddress, e.Port); }
             catch (Exception ex) { _logger?.LogWarning(ex, "Typed handler for {T} threw.", typeof(T).Name); }
         };
@@ -213,7 +213,7 @@ public sealed class UdpPlcServer : IPlcConnection
         // 2. Size-based fallback
         foreach (var def in _registry.Definitions)
         {
-            if (def.MessageId == 0 && def.TotalWireSize == payload.Length)
+            if (def.MessageId == 0 && def.EffectiveWireSize == payload.Length)
             {
                 TryDeserializeAndFire(def, payload, remoteAddress, port);
                 return;

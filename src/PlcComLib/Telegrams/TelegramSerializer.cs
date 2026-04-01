@@ -13,7 +13,7 @@ public static class TelegramSerializer
     {
         ArgumentNullException.ThrowIfNull(telegram);
         var def = telegram.Definition;
-        int totalSize = def.TotalWireSize;
+        int totalSize = def.EffectiveWireSize;
         var buffer = new byte[totalSize];
         int offset = 0;
         foreach (var field in def.Fields)

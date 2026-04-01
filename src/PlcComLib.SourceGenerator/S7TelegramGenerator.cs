@@ -14,8 +14,6 @@ public sealed class S7TelegramGenerator : IIncrementalGenerator
 {
     private const string GenNs = "PlcComLib.SourceGenerator";
     private const string TelegramAttrFqn = "PlcComLib.SourceGenerator.S7TelegramAttribute";
-    private const string MsgIdAttrFqn    = "PlcComLib.SourceGenerator.MsgIdAttribute";
-    private const string MsgLengthAttrFqn = "PlcComLib.SourceGenerator.MsgLengthAttribute";
 
     // ──────────────────────────────────────────────────────────────────────────
     // Initialise pipeline
@@ -66,41 +64,12 @@ public sealed class S7TelegramGenerator : IIncrementalGenerator
         }
         if (telegramAttr is null) return null;
 
-        ushort messageId = 0;
-        string? msgIdPropName     = null;
-        string? msgIdPropType     = null;
-        string? msgLengthPropName = null;
-        string? msgLengthPropType = null;
-
         var fields = new List<FieldInfo>();
         foreach (var member in cls.Members.OfType<PropertyDeclarationSyntax>())
         {
             ct.ThrowIfCancellationRequested();
             if (ctx.SemanticModel.GetDeclaredSymbol(member, ct) is not IPropertySymbol prop)
                 continue;
-
-            bool isMsgId = false, isMsgLength = false;
-            foreach (var a in prop.GetAttributes())
-            {
-                var attrFqn = a.AttributeClass?.ToDisplayString() ?? "";
-                if (attrFqn == MsgIdAttrFqn)
-                {
-                    isMsgId = true;
-                    if (a.ConstructorArguments.Length >= 1 && a.ConstructorArguments[0].Value is not null)
-                        messageId = (ushort)System.Convert.ToUInt32(a.ConstructorArguments[0].Value);
-                    msgIdPropName = prop.Name;
-                    msgIdPropType = GetPropTypeName(prop.Type);
-                }
-                else if (attrFqn == MsgLengthAttrFqn)
-                {
-                    isMsgLength = true;
-                    msgLengthPropName = prop.Name;
-                    msgLengthPropType = GetPropTypeName(prop.Type);
-                }
-            }
-
-            // [MsgId] and [MsgLength] properties are framing markers, not S7 data fields.
-            if (isMsgId || isMsgLength) continue;
 
             var fi = BuildFieldInfo(prop.GetAttributes(), prop.Name);
             if (fi is not null) fields.Add(fi);
@@ -110,13 +79,7 @@ public sealed class S7TelegramGenerator : IIncrementalGenerator
             ? null
             : symbol.ContainingNamespace.ToDisplayString();
 
-        return new TelegramClassInfo(
-            symbol.Name, ns, messageId,
-            fields.ToImmutableArray(),
-            msgIdPropName,
-            msgIdPropType,
-            msgLengthPropName,
-            msgLengthPropType);
+        return new TelegramClassInfo(symbol.Name, ns, fields.ToImmutableArray());
     }
 
     private static FieldInfo? BuildFieldInfo(ImmutableArray<AttributeData> attrs, string name)
@@ -223,9 +186,9 @@ public sealed class S7TelegramGenerator : IIncrementalGenerator
 
     private static string GenerateCode(TelegramClassInfo info)
     {
-        bool hasMsgLength = info.MsgLengthPropName is not null;
-        int totalWireSize = 2; // MessageId header (always 2 bytes)
-        if (hasMsgLength) totalWireSize += 2; // MessageLength field (UInt16, 2 bytes)
+        // Wire size: 2 bytes for TelegramId header + sum of all data fields.
+        // No embedded length field — framing is done by TelegramIdFramer using the registered wire size.
+        int totalWireSize = 2; // TelegramId header
         foreach (var f in info.Fields) totalWireSize += f.WireSize;
 
         var sb = new StringBuilder(1024);
@@ -242,34 +205,15 @@ public sealed class S7TelegramGenerator : IIncrementalGenerator
         sb.AppendLine($"partial class {info.ClassName} : global::PlcComLib.Telegrams.ITypedS7Telegram<{info.ClassName}>");
         sb.AppendLine("{");
 
-        // ── static members ────────────────────────────────────────────────────
-        sb.AppendLine($"    public static ushort MessageId => 0x{info.MessageId:X4};");
+        // ── static convenience members ────────────────────────────────────────
+        // WireSize is the compile-time total; MessageId is the runtime value from Definition.
+        sb.AppendLine($"    /// <summary>Total wire size in bytes (2-byte TelegramId header + data fields).</summary>");
         sb.AppendLine($"    public static int WireSize => {totalWireSize};");
         sb.AppendLine();
 
-        // ── [MsgId] partial property implementation (any user-chosen name) ────
-        if (info.MsgIdPropName is not null)
-        {
-            var idType = info.MsgIdPropType ?? "ushort";
-            var idExpr = idType == "ushort" ? "MessageId" : $"({idType})MessageId";
-            sb.AppendLine($"    public partial {idType} {info.MsgIdPropName} => {idExpr};");
-            sb.AppendLine();
-        }
-
-        // ── [MsgLength] partial property implementation (any user-chosen name) ─
-        if (info.MsgLengthPropName is not null)
-        {
-            var lenType = info.MsgLengthPropType ?? "int";
-            var lenExpr = lenType == "int" ? "WireSize" : $"({lenType})WireSize";
-            sb.AppendLine($"    public partial {lenType} {info.MsgLengthPropName} => {lenExpr};");
-            sb.AppendLine();
-        }
-
-        // ── ITelegram instance members ────────────────────────────────────────
-        sb.AppendLine("    /// <summary>The telegram identifier — always the same as the static <see cref=\"MessageId\"/>.</summary>");
-        sb.AppendLine("    public ushort TelegramId => MessageId;");
-        sb.AppendLine("    ushort global::PlcComLib.Telegrams.ITelegram.MessageId => MessageId;");
-        sb.AppendLine("    int global::PlcComLib.Telegrams.ITelegram.Length => WireSize;");
+        // ── ITelegram instance member ─────────────────────────────────────────
+        sb.AppendLine("    /// <summary>The telegram identifier; equals <c>Definition.MessageId</c> set via the connection builder.</summary>");
+        sb.AppendLine("    public ushort TelegramId => _s7Definition.MessageId;");
         sb.AppendLine();
 
         // ── Definition ────────────────────────────────────────────────────────
@@ -280,12 +224,10 @@ public sealed class S7TelegramGenerator : IIncrementalGenerator
         sb.AppendLine("        new global::PlcComLib.Telegrams.TelegramDefinition");
         sb.AppendLine("        {");
         sb.AppendLine($"            Id = \"{info.ClassName}\",");
-        sb.AppendLine($"            MessageId = 0x{info.MessageId:X4},");
+        sb.AppendLine($"            ConfiguredWireSize = {totalWireSize},");
         sb.AppendLine("            Fields =");
         sb.AppendLine("            [");
-        sb.AppendLine("                new global::PlcComLib.Telegrams.TelegramField { Name = \"__MessageId\", DataType = global::PlcComLib.DataTypes.S7DataType.Word },");
-        if (hasMsgLength)
-            sb.AppendLine("                new global::PlcComLib.Telegrams.TelegramField { Name = \"__MessageLength\", DataType = global::PlcComLib.DataTypes.S7DataType.Word },");
+        sb.AppendLine("                new global::PlcComLib.Telegrams.TelegramField { Name = \"__TelegramId\", DataType = global::PlcComLib.DataTypes.S7DataType.Word },");
         foreach (var f in info.Fields)
         {
             sb.Append($"                new global::PlcComLib.Telegrams.TelegramField {{ Name = \"{f.Name}\", DataType = {f.DataTypeExpr}");
@@ -300,16 +242,14 @@ public sealed class S7TelegramGenerator : IIncrementalGenerator
         sb.AppendLine();
 
         // ── Serialize ─────────────────────────────────────────────────────────
-        // byte order is supplied by the caller (the connection); TelegramId follows the same byte order.
+        // Wire format: [TelegramId: 2 bytes][data fields…]
+        // The TelegramId value comes from Definition.MessageId (set at registration time by the builder).
         sb.AppendLine("    public byte[] Serialize(global::PlcComLib.DataTypes.ByteOrder byteOrder = global::PlcComLib.DataTypes.ByteOrder.BigEndian)");
         sb.AppendLine("    {");
         sb.AppendLine("        bool __le = byteOrder == global::PlcComLib.DataTypes.ByteOrder.LittleEndian;");
         sb.AppendLine($"        var __buf = new byte[WireSize];");
-        // TelegramId follows the connection byte order
-        sb.AppendLine("        if (__le) global::System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(__buf.AsSpan(0), MessageId); else global::System.Buffers.Binary.BinaryPrimitives.WriteUInt16BigEndian(__buf.AsSpan(0), MessageId);");
-        if (hasMsgLength)
-            sb.AppendLine("        if (__le) global::System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(__buf.AsSpan(2), (ushort)WireSize); else global::System.Buffers.Binary.BinaryPrimitives.WriteUInt16BigEndian(__buf.AsSpan(2), (ushort)WireSize);");
-        int offset = hasMsgLength ? 4 : 2;
+        sb.AppendLine("        if (__le) global::System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(__buf.AsSpan(0), _s7Definition.MessageId); else global::System.Buffers.Binary.BinaryPrimitives.WriteUInt16BigEndian(__buf.AsSpan(0), _s7Definition.MessageId);");
+        int offset = 2; // data fields start after the 2-byte TelegramId
         foreach (var f in info.Fields)
         {
             EmitSerialize(sb, f, offset);
@@ -327,16 +267,10 @@ public sealed class S7TelegramGenerator : IIncrementalGenerator
         sb.AppendLine("        if (data.Length < WireSize)");
         sb.AppendLine($"            throw new global::System.ArgumentException($\"Buffer too short: expected {{WireSize}} bytes, got {{data.Length}}.\");");
         sb.AppendLine("        ushort __id = __le ? global::System.Buffers.Binary.BinaryPrimitives.ReadUInt16LittleEndian(data) : global::System.Buffers.Binary.BinaryPrimitives.ReadUInt16BigEndian(data);");
-        sb.AppendLine("        if (__id != MessageId)");
-        sb.AppendLine($"            throw new global::System.ArgumentException($\"MessageId mismatch: expected 0x{info.MessageId:X4}, got 0x{{__id:X4}}.\");");
-        if (hasMsgLength)
-        {
-            sb.AppendLine("        ushort __len = __le ? global::System.Buffers.Binary.BinaryPrimitives.ReadUInt16LittleEndian(data.Slice(2, 2)) : global::System.Buffers.Binary.BinaryPrimitives.ReadUInt16BigEndian(data.Slice(2, 2));");
-            sb.AppendLine("        if (__len != WireSize)");
-            sb.AppendLine($"            throw new global::System.ArgumentException($\"MessageLength mismatch: expected {{WireSize}}, got {{__len}}.\");");
-        }
+        sb.AppendLine("        if (_s7Definition.MessageId != 0 && __id != _s7Definition.MessageId)");
+        sb.AppendLine($"            throw new global::System.ArgumentException($\"TelegramId mismatch: expected 0x{{_s7Definition.MessageId:X4}}, got 0x{{__id:X4}}.\");");
         sb.AppendLine($"        var __r = new {info.ClassName}();");
-        offset = hasMsgLength ? 4 : 2;
+        offset = 2; // data fields start after the 2-byte TelegramId
         foreach (var f in info.Fields)
         {
             EmitDeserialize(sb, f, offset);
@@ -511,12 +445,7 @@ public sealed class S7TelegramGenerator : IIncrementalGenerator
     private sealed record TelegramClassInfo(
         string ClassName,
         string? Namespace,
-        ushort MessageId,
-        ImmutableArray<FieldInfo> Fields,
-        string? MsgIdPropName,
-        string? MsgIdPropType,
-        string? MsgLengthPropName,
-        string? MsgLengthPropType)
+        ImmutableArray<FieldInfo> Fields)
     {
         public string HintName =>
             Namespace is null ? ClassName : $"{Namespace}.{ClassName}";
@@ -536,32 +465,6 @@ public sealed class S7TelegramGenerator : IIncrementalGenerator
         /// <summary>Marks a <c>partial</c> class as a strongly-typed S7 telegram.</summary>
         [System.AttributeUsage(System.AttributeTargets.Class)]
         public sealed class S7TelegramAttribute : System.Attribute { }
-
-        /// <summary>
-        /// Marks a <c>partial</c> property as the message-id field for this telegram.
-        /// The decorated property can have any name; the generator reads the <c>messageId</c>
-        /// value from this attribute and uses it for wire framing.
-        /// The property may be declared with any numeric type, e.g.
-        /// <c>public partial ushort YourName { get; }</c> or
-        /// <c>public partial int YourName { get; }</c>.
-        /// </summary>
-        [System.AttributeUsage(System.AttributeTargets.Property)]
-        public sealed class MsgIdAttribute : System.Attribute
-        {
-            public MsgIdAttribute(ushort messageId) => MessageId = messageId;
-            public ushort MessageId { get; }
-        }
-
-        /// <summary>
-        /// Marks a <c>partial</c> property as the wire-length field for this telegram.
-        /// The decorated property can have any name; the generator implements it to return
-        /// the total wire size (including the 2-byte message-id header).
-        /// The property may be declared with any numeric type, e.g.
-        /// <c>public partial int YourName { get; }</c> or
-        /// <c>public partial ushort YourName { get; }</c>.
-        /// </summary>
-        [System.AttributeUsage(System.AttributeTargets.Property)]
-        public sealed class MsgLengthAttribute : System.Attribute { }
 
         [System.AttributeUsage(System.AttributeTargets.Property)] public sealed class S7BoolAttribute     : System.Attribute { }
         [System.AttributeUsage(System.AttributeTargets.Property)] public sealed class S7ByteAttribute     : System.Attribute { }

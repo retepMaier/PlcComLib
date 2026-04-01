@@ -17,23 +17,12 @@ public sealed class TcpPlcServerBuilder
     private TimeSpan _timeout = TimeSpan.FromSeconds(10);
     private IMessageFramer? _framer;
     private bool _useLengthFramer;
-    private bool _useTelegramIdFramer;
     private ILogger<TcpPlcServer>? _logger;
     private readonly TelegramRegistry _registry = new();
     private ByteOrder _byteOrder = ByteOrder.BigEndian;
+    private TelegramDefinition? _lastRegisteredDef;
 
-    /// <summary>
-    /// Sets the local IP address and TCP port the server will bind to and listen on.
-    /// </summary>
-    /// <param name="host">
-    /// The local IP address to bind to. Use <c>"0.0.0.0"</c> (default) to listen on all
-    /// network interfaces, or a specific address such as <c>"192.168.1.10"</c> to restrict
-    /// incoming connections to a single interface.
-    /// </param>
-    /// <param name="port">
-    /// The TCP port number to listen on. Must match the port configured on the connecting
-    /// PLC or client. Siemens S7 custom TCP communication typically uses port <c>2000</c>.
-    /// </param>
+    /// <summary>Local address and TCP port to bind to. Use <c>"0.0.0.0"</c> for all interfaces.</summary>
     public TcpPlcServerBuilder ListenOn(string host, int port)
     {
         _host = host;
@@ -41,30 +30,14 @@ public sealed class TcpPlcServerBuilder
         return this;
     }
 
-    /// <summary>
-    /// Maximum number of concurrent client connections the server will accept simultaneously.
-    /// </summary>
-    /// <param name="max">
-    /// The connection backlog and concurrency limit. Connections beyond this limit are
-    /// refused by the OS until an existing client disconnects. Default: <c>10</c>.
-    /// For high-availability scenarios with many PLCs reporting simultaneously, increase
-    /// this to match the expected number of concurrent connections.
-    /// </param>
+    /// <summary>Maximum concurrent client connections. Default: <c>10</c>.</summary>
     public TcpPlcServerBuilder WithMaxConnections(int max)
     {
         _maxConnections = max;
         return this;
     }
 
-    /// <summary>
-    /// Send and receive timeout for each accepted client socket.
-    /// If a client does not send or receive data within this period, the operation
-    /// fails and the client connection is closed.
-    /// </summary>
-    /// <param name="timeout">
-    /// The per-client socket timeout. Default: <c>10 seconds</c>. Set to a value
-    /// longer than the PLC's data-send cycle to avoid dropping slow clients.
-    /// </param>
+    /// <summary>Per-client send/receive socket timeout. Default: <c>10 s</c>.</summary>
     public TcpPlcServerBuilder WithTimeout(TimeSpan timeout)
     {
         _timeout = timeout;
@@ -72,148 +45,46 @@ public sealed class TcpPlcServerBuilder
     }
 
     /// <summary>
-    /// Use the built-in 4-byte big-endian length-prefix framer (default).
+    /// Use the built-in length framer that reads the total frame length from bytes 2–3
+    /// of the telegram payload (immediately after the 2-byte TelegramId).
     /// </summary>
     /// <remarks>
-    /// <para>
-    /// Wire format: <c>[Length: UInt32 BE][Payload: byte * Length]</c>.
-    /// The 4-byte header encodes the byte-length of the payload that follows.
-    /// This is the recommended framer for TCP streams because it handles partial
-    /// reads and arbitrary payload sizes without ambiguity.
-    /// </para>
-    /// <para>
-    /// Both sides of the connection (client and server) must use the same framer.
-    /// </para>
-    /// </remarks>
-    public TcpPlcServerBuilder WithLengthPrefixFramer()
-    {
-        _framer              = new LengthPrefixFramer();
-        _useLengthFramer     = false;
-        _useTelegramIdFramer = false;
-        return this;
-    }
-
-    /// <summary>
-    /// Use the built-in 2-byte payload-embedded length framer.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Wire format: <c>[TotalLength: UInt16 BE (2 bytes)][Payload: byte * (TotalLength - 2)]</c>.
-    /// The first 2 bytes of every message encode the total frame length including those 2 bytes.
-    /// </para>
-    /// <para>
-    /// Use this framer when communicating with a Siemens PLC via TSEND/TRCV, where the length
-    /// field is a normal WORD variable at the start of the DB block and is part of the raw payload.
-    /// </para>
-    /// </remarks>
-    public TcpPlcServerBuilder WithPayloadLengthFramer()
-    {
-        _framer              = new PayloadLengthFramer();
-        _useLengthFramer     = false;
-        _useTelegramIdFramer = false;
-        return this;
-    }
-
-    /// <summary>
-    /// Use the built-in length framer that reads the total frame length from the <c>[MsgLength]</c>
-    /// field embedded at bytes 2–3 of the telegram payload (immediately after the 2-byte <c>[MsgId]</c>).
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Wire format: <c>[TelegramId: UInt16 (2 bytes)][TotalLength: UInt16 (2 bytes)][Data fields…]</c>.
-    /// Both values are already part of the serialised telegram payload — no external header is added.
-    /// </para>
-    /// <para>
-    /// Use this framer when the PLC's DB block starts with the telegram identifier (<c>[MsgId]</c>)
-    /// followed by the total message length (<c>[MsgLength]</c>).
-    /// </para>
+    /// Wire format: <c>[TelegramId: UInt16][TotalLength: UInt16][Data fields…]</c>.
+    /// Use when the remote device embeds the total message length in the payload.
+    /// For most new integrations, prefer the default <see cref="TelegramIdFramer"/>
+    /// (configured automatically via <see cref="RegisterTelegram{T}"/>) instead.
     /// </remarks>
     public TcpPlcServerBuilder WithLengthFramer()
     {
-        _framer              = null;
-        _useLengthFramer     = true;
-        _useTelegramIdFramer = false;
-        return this;
-    }
-
-    /// <summary>
-    /// Use the built-in TelegramId-based framer.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// The first 2 bytes of every message are the TelegramId (from <c>[MsgId]</c>). The framer
-    /// looks up the expected total wire size for that TelegramId from the registered telegram
-    /// definitions and waits until that many bytes are available.
-    /// </para>
-    /// <para>
-    /// Call <see cref="RegisterTelegram{T}"/> for every telegram type before calling
-    /// <see cref="Build"/> so the framer can resolve frame sizes.
-    /// </para>
-    /// </remarks>
-    public TcpPlcServerBuilder WithTelegramIdFramer()
-    {
-        _framer              = null;
-        _useLengthFramer     = false;
-        _useTelegramIdFramer = true;
+        _framer          = null;
+        _useLengthFramer = true;
         return this;
     }
 
     /// <summary>
     /// Plug in a custom <see cref="IMessageFramer"/> implementation.
-    /// Use this when connecting PLCs or devices that use a proprietary framing protocol
+    /// Use when the remote device uses a proprietary framing protocol
     /// (e.g. STX/ETX delimiters, SLIP encoding, or a custom header structure).
     /// </summary>
-    /// <param name="framer">
-    /// Your custom framer. Must implement both <c>Frame(ReadOnlySpan&lt;byte&gt;)</c>
-    /// (wraps a payload for sending) and <c>TryExtract</c> (extracts the next complete
-    /// message from the receive buffer).
-    /// </param>
     public TcpPlcServerBuilder WithFramer(IMessageFramer framer)
     {
-        _framer = framer;
+        _framer          = framer;
+        _useLengthFramer = false;
         return this;
     }
 
     /// <summary>
-    /// Sets the byte order used to serialise and deserialise all multi-byte data fields
-    /// (Word, Int, DWord, Real, …) on this server connection.
+    /// Sets the byte order for all multi-byte data fields on this connection.
+    /// <see cref="ByteOrder.BigEndian"/> (default) for Siemens S7 PLCs;
+    /// <see cref="ByteOrder.LittleEndian"/> for Windows/Linux devices.
     /// </summary>
-    /// <param name="byteOrder">
-    /// <list type="bullet">
-    ///   <item>
-    ///     <term><see cref="ByteOrder.BigEndian"/> (default)</term>
-    ///     <description>
-    ///       Siemens S7 PLC wire format. All multi-byte values are transmitted
-    ///       most-significant-byte first. Use this for all standard S7-300/400/1200/1500 PLCs.
-    ///     </description>
-    ///   </item>
-    ///   <item>
-    ///     <term><see cref="ByteOrder.LittleEndian"/></term>
-    ///     <description>
-    ///       Windows/Linux device wire format. Use this when accepting connections from
-    ///       PCs, embedded Linux devices, or any non-PLC client that uses native x86/ARM byte order.
-    ///     </description>
-    ///   </item>
-    /// </list>
-    /// <para>
-    /// The 2-byte <c>TelegramId</c> header follows the same byte order as data fields.
-    /// </para>
-    /// </param>
     public TcpPlcServerBuilder WithByteOrder(ByteOrder byteOrder)
     {
         _byteOrder = byteOrder;
         return this;
     }
 
-    /// <summary>
-    /// Attaches a Microsoft.Extensions.Logging <see cref="ILogger{TCategoryName}"/> for
-    /// structured diagnostic output (client connections, disconnections, dispatch warnings, etc.).
-    /// </summary>
-    /// <param name="logger">
-    /// The logger instance. Obtain one from your DI container via
-    /// <c>loggerFactory.CreateLogger&lt;TcpPlcServer&gt;()</c>.
-    /// If omitted, no log output is produced.
-    /// </param>
+    /// <summary>Attaches a <see cref="ILogger{TCategoryName}"/> for structured diagnostic output.</summary>
     public TcpPlcServerBuilder WithLogger(ILogger<TcpPlcServer> logger)
     {
         _logger = logger;
@@ -222,16 +93,19 @@ public sealed class TcpPlcServerBuilder
 
     /// <summary>
     /// Registers a source-generated typed telegram so that incoming payloads with a matching
-    /// <c>TelegramId</c> are deserialised into <typeparamref name="T"/> and dispatched to
-    /// any <c>Subscribe&lt;T&gt;</c> handlers. Uses <c>T.Definition</c> — zero reflection.
+    /// TelegramId are deserialised and dispatched to any <c>Subscribe&lt;T&gt;</c> handlers.
+    /// Chain <see cref="WithMessageId"/> and <see cref="WithLength"/> to configure the
+    /// TelegramId and wire size used for dispatch and framing:
+    /// <code>
+    /// .RegisterTelegram&lt;MachineStatus&gt;()
+    ///     .WithMessageId(0x0001)
+    ///     .WithLength(MachineStatus.WireSize)
+    /// </code>
     /// </summary>
-    /// <typeparam name="T">
-    /// A <c>partial</c> class decorated with <c>[S7Telegram(messageId: …)]</c> and processed
-    /// by the Roslyn source generator.
-    /// </typeparam>
     public TcpPlcServerBuilder RegisterTelegram<T>() where T : ITypedS7Telegram<T>
     {
         _registry.Register(T.Definition);
+        _lastRegisteredDef = T.Definition;
         return this;
     }
 
@@ -239,21 +113,39 @@ public sealed class TcpPlcServerBuilder
     /// Registers a hand-crafted <see cref="TelegramDefinition"/> for legacy or dynamic
     /// telegram dispatch without the source generator.
     /// </summary>
-    /// <param name="definition">
-    /// A manually constructed definition describing the telegram's fields and
-    /// (optionally) its <see cref="TelegramDefinition.TelegramId"/>. Definitions with
-    /// <c>TelegramId == 0</c> fall back to size-based matching.
-    /// </param>
     public TcpPlcServerBuilder RegisterTelegram(TelegramDefinition definition)
     {
         _registry.Register(definition);
+        _lastRegisteredDef = definition;
+        return this;
+    }
+
+    /// <summary>
+    /// Sets the TelegramId for the most recently registered telegram.
+    /// </summary>
+    /// <param name="messageId">Unique 2-byte identifier for this telegram type.</param>
+    public TcpPlcServerBuilder WithMessageId(ushort messageId)
+    {
+        if (_lastRegisteredDef is not null)
+            _lastRegisteredDef.MessageId = messageId;
+        return this;
+    }
+
+    /// <summary>
+    /// Sets the expected total wire size for the most recently registered telegram.
+    /// Used by the <see cref="TelegramIdFramer"/> to determine message boundaries.
+    /// For source-generated telegrams, pass <c>T.WireSize</c>.
+    /// </summary>
+    public TcpPlcServerBuilder WithLength(int wireSize)
+    {
+        if (_lastRegisteredDef is not null)
+            _lastRegisteredDef.ConfiguredWireSize = wireSize;
         return this;
     }
 
     /// <summary>
     /// Builds and returns a fully configured <see cref="TcpPlcServer"/>.
-    /// Call <see cref="TcpPlcServer.StartAsync"/> on the returned instance to begin
-    /// accepting client connections.
+    /// Call <see cref="TcpPlcServer.StartAsync"/> on the returned instance to begin accepting.
     /// </summary>
     public TcpPlcServer Build()
     {
@@ -265,9 +157,9 @@ public sealed class TcpPlcServerBuilder
             MaxConnections = _maxConnections,
             Mode = ConnectionMode.Server,
         };
-        var framer = _useTelegramIdFramer ? new TelegramIdFramer(_registry.Definitions, _byteOrder)
-                   : _useLengthFramer     ? new LengthFramer(_byteOrder)
-                   : _framer;
+        var framer = _framer ?? (_useLengthFramer
+            ? new LengthFramer(_byteOrder)
+            : (IMessageFramer)new TelegramIdFramer(_registry.Definitions, _byteOrder));
         return new TcpPlcServer(config, _registry, framer, _logger, _byteOrder);
     }
 }
