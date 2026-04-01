@@ -80,15 +80,7 @@ public sealed class UdpPlcClientBuilder
         return this;
     }
 
-    /// <summary>
-    /// Sets the TelegramId for the most recently registered telegram.
-    /// </summary>
-    /// <param name="messageId">Numeric identifier for this telegram type. Any numeric value is accepted.</param>
-    public UdpPlcClientBuilder WithMessageId(long messageId)
-    {
-        _lastRegisteredDef?.MessageId = messageId;
-        return this;
-    }
+    
 
     /// <summary>
     /// Sets the TelegramId for the most recently registered telegram, together with the
@@ -101,29 +93,18 @@ public sealed class UdpPlcClientBuilder
     /// </typeparam>
     /// <param name="id">Expected id value for this telegram type. Any numeric value is accepted.</param>
     /// <param name="byteOffset">Zero-based byte offset in the payload where the id is located.</param>
-    public UdpPlcClientBuilder WithMessageId<TType>(long id, int byteOffset)
-        where TType : IS7FramingType
+    public UdpPlcClientBuilder WithMessageId<TType>(long id, int byteOffset) where TType : IS7FramingType
     {
         if (_lastRegisteredDef is not null)
         {
-            _lastRegisteredDef.MessageId           = id;
+            _lastRegisteredDef.MessageId = id;
             _lastRegisteredDef.MessageIdByteOffset = byteOffset;
-            _lastRegisteredDef.MessageIdDataType   = TType.DataType;
+            _lastRegisteredDef.MessageIdDataType = TType.DataType;
         }
         return this;
     }
 
-    /// <summary>
-    /// Sets the expected total wire size for the most recently registered telegram.
-    /// For source-generated telegrams, pass <c>T.WireSize</c>.
-    /// </summary>
-    /// <param name="wireSize">Total wire size. Any numeric value is accepted.</param>
-    public UdpPlcClientBuilder WithLength(long wireSize)
-    {
-        if (_lastRegisteredDef is not null)
-            _lastRegisteredDef.ConfiguredWireSize = (int)wireSize;
-        return this;
-    }
+    
 
     /// <summary>
     /// Sets the expected total wire size for the most recently registered telegram and
@@ -139,14 +120,13 @@ public sealed class UdpPlcClientBuilder
     /// </typeparam>
     /// <param name="length">Expected total length in bytes. Any numeric value is accepted.</param>
     /// <param name="byteOffset">Zero-based byte offset in the payload where the length field is located.</param>
-    public UdpPlcClientBuilder WithLength<TType>(long length, int byteOffset)
-        where TType : IS7FramingType
+    public UdpPlcClientBuilder WithLength<TType>(long length, int byteOffset) where TType : IS7FramingType
     {
         if (_lastRegisteredDef is not null)
         {
             _lastRegisteredDef.ConfiguredWireSize = (int)length;
-            _lastRegisteredDef.LengthByteOffset   = byteOffset;
-            _lastRegisteredDef.LengthDataType     = TType.DataType;
+            _lastRegisteredDef.LengthByteOffset = byteOffset;
+            _lastRegisteredDef.LengthDataType = TType.DataType;
         }
         return this;
     }

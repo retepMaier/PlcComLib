@@ -44,34 +44,9 @@ public sealed class TcpPlcServerBuilder
         return this;
     }
 
-    /// <summary>
-    /// Use the built-in length framer that reads the total frame length from bytes 2–3
-    /// of the telegram payload (immediately after the 2-byte TelegramId).
-    /// </summary>
-    /// <remarks>
-    /// Wire format: <c>[TelegramId: UInt16][TotalLength: UInt16][Data fields…]</c>.
-    /// Use when the remote device embeds the total message length in the payload.
-    /// For most new integrations, prefer the default <see cref="TelegramIdFramer"/>
-    /// (configured automatically via <see cref="RegisterTelegram{T}"/>) instead.
-    /// </remarks>
-    public TcpPlcServerBuilder WithLengthFramer()
-    {
-        _framer          = null;
-        _useLengthFramer = true;
-        return this;
-    }
 
-    /// <summary>
-    /// Plug in a custom <see cref="IMessageFramer"/> implementation.
-    /// Use when the remote device uses a proprietary framing protocol
-    /// (e.g. STX/ETX delimiters, SLIP encoding, or a custom header structure).
-    /// </summary>
-    public TcpPlcServerBuilder WithFramer(IMessageFramer framer)
-    {
-        _framer          = framer;
-        _useLengthFramer = false;
-        return this;
-    }
+
+
 
     /// <summary>
     /// Sets the byte order for all multi-byte data fields on this connection.
@@ -120,16 +95,7 @@ public sealed class TcpPlcServerBuilder
         return this;
     }
 
-    /// <summary>
-    /// Sets the TelegramId for the most recently registered telegram.
-    /// </summary>
-    /// <param name="messageId">Numeric identifier for this telegram type. Any numeric value is accepted.</param>
-    public TcpPlcServerBuilder WithMessageId(long messageId)
-    {
-        _lastRegisteredDef?.MessageId = messageId;
-        return this;
-    }
-
+    
     /// <summary>
     /// Sets the TelegramId for the most recently registered telegram, together with the
     /// byte offset and S7 data type used to read that id from the received payload.
@@ -153,17 +119,7 @@ public sealed class TcpPlcServerBuilder
         return this;
     }
 
-    /// <summary>
-    /// Sets the expected total wire size for the most recently registered telegram.
-    /// Used by the <see cref="TelegramIdFramer"/> to determine message boundaries.
-    /// For source-generated telegrams, pass <c>T.WireSize</c>.
-    /// </summary>
-    /// <param name="wireSize">Total wire size. Any numeric value is accepted.</param>
-    public TcpPlcServerBuilder WithLength(long wireSize)
-    {
-        _lastRegisteredDef?.ConfiguredWireSize = (int)wireSize;
-        return this;
-    }
+    
 
     /// <summary>
     /// Sets the expected total wire size for the most recently registered telegram and
@@ -179,8 +135,7 @@ public sealed class TcpPlcServerBuilder
     /// </typeparam>
     /// <param name="length">Expected total length in bytes. Any numeric value is accepted.</param>
     /// <param name="byteOffset">Zero-based byte offset in the payload where the length field is located.</param>
-    public TcpPlcServerBuilder WithLength<TType>(long length, int byteOffset)
-        where TType : IS7FramingType
+    public TcpPlcServerBuilder WithLength<TType>(long length, int byteOffset)where TType : IS7FramingType
     {
         if (_lastRegisteredDef is not null)
         {

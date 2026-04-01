@@ -72,15 +72,7 @@ public sealed class UdpPlcServerBuilder
         return this;
     }
 
-    /// <summary>
-    /// Sets the TelegramId for the most recently registered telegram.
-    /// </summary>
-    /// <param name="messageId">Numeric identifier for this telegram type. Any numeric value is accepted.</param>
-    public UdpPlcServerBuilder WithMessageId(long messageId)
-    {
-        _lastRegisteredDef?.MessageId = messageId;
-        return this;
-    }
+    
 
     /// <summary>
     /// Sets the TelegramId for the most recently registered telegram, together with the
@@ -104,16 +96,7 @@ public sealed class UdpPlcServerBuilder
         return this;
     }
 
-    /// <summary>
-    /// Sets the expected total wire size for the most recently registered telegram.
-    /// For source-generated telegrams, pass <c>T.WireSize</c>.
-    /// </summary>
-    /// <param name="wireSize">Total wire size. Any numeric value is accepted.</param>
-    public UdpPlcServerBuilder WithLength(long wireSize)
-    {
-        _lastRegisteredDef?.ConfiguredWireSize = (int)wireSize;
-        return this;
-    }
+    
 
     /// <summary>
     /// Sets the expected total wire size for the most recently registered telegram and

@@ -44,34 +44,9 @@ public sealed class TcpPlcClientBuilder
         return this;
     }
 
-    /// <summary>
-    /// Use the built-in length framer that reads the total frame length from bytes 2–3
-    /// of the telegram payload (immediately after the 2-byte TelegramId).
-    /// </summary>
-    /// <remarks>
-    /// Wire format: <c>[TelegramId: UInt16][TotalLength: UInt16][Data fields…]</c>.
-    /// Use when the remote device embeds the total message length in the payload.
-    /// For most new integrations, prefer the default <see cref="TelegramIdFramer"/>
-    /// (configured automatically via <see cref="RegisterTelegram{T}"/>) instead.
-    /// </remarks>
-    public TcpPlcClientBuilder WithLengthFramer()
-    {
-        _framer          = null;
-        _useLengthFramer = true;
-        return this;
-    }
 
-    /// <summary>
-    /// Plug in a custom <see cref="IMessageFramer"/> implementation.
-    /// Use when the remote device uses a proprietary framing protocol
-    /// (e.g. STX/ETX delimiters, SLIP encoding, or a custom header structure).
-    /// </summary>
-    public TcpPlcClientBuilder WithFramer(IMessageFramer framer)
-    {
-        _framer          = framer;
-        _useLengthFramer = false;
-        return this;
-    }
+
+
 
     /// <summary>
     /// Sets the byte order for all multi-byte data fields on this connection.
@@ -134,8 +109,7 @@ public sealed class TcpPlcClientBuilder
     /// </typeparam>
     /// <param name="id">Expected id value for this telegram type. Any numeric value is accepted.</param>
     /// <param name="byteOffset">Zero-based byte offset in the payload where the id is located.</param>
-    public TcpPlcClientBuilder WithMessageId<TType>(long id, int byteOffset)
-        where TType : IS7FramingType
+    public TcpPlcClientBuilder WithMessageId<TType>(long id, int byteOffset)where TType : IS7FramingType
     {
         if (_lastRegisteredDef is not null)
         {

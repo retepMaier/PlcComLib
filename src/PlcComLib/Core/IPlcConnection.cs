@@ -67,39 +67,25 @@ public sealed class RawBytesEventArgs : EventArgs
 }
 
 /// <summary>Event args for a received telegram.</summary>
-public sealed class TelegramReceivedEventArgs : EventArgs
+public sealed class TelegramReceivedEventArgs(Telegram telegram, byte[]? rawPayload = null, string remoteAddress = "", int port = 0) : EventArgs
 {
-    public TelegramReceivedEventArgs(Telegram telegram, byte[]? rawPayload = null, string remoteAddress = "", int port = 0)
-    {
-        Telegram      = telegram;
-        RawPayload    = rawPayload ?? [];
-        RemoteAddress = remoteAddress;
-        Port          = port;
-    }
-
-    public Telegram Telegram { get; }
+    public Telegram Telegram { get; } = telegram;
 
     /// <summary>The raw wire bytes that produced this telegram (includes the MessageId header for typed telegrams).</summary>
-    public byte[] RawPayload { get; }
+    public byte[] RawPayload { get; } = rawPayload ?? [];
 
     /// <summary>The IP address of the remote endpoint that sent this telegram.</summary>
-    public string RemoteAddress { get; }
+    public string RemoteAddress { get; } = remoteAddress;
 
     /// <summary>The port of the remote endpoint that sent this telegram.</summary>
-    public int Port { get; }
+    public int Port { get; } = port;
 }
 
 /// <summary>Event args for a connection state change.</summary>
-public sealed class ConnectionStateChangedEventArgs : EventArgs
+public sealed class ConnectionStateChangedEventArgs(bool isConnected, string? reason = null) : EventArgs
 {
-    public ConnectionStateChangedEventArgs(bool isConnected, string? reason = null)
-    {
-        IsConnected = isConnected;
-        Reason = reason;
-    }
-
-    public bool IsConnected { get; }
-    public string? Reason { get; }
+    public bool IsConnected { get; } = isConnected;
+    public string? Reason { get; } = reason;
 }
 
 /// <summary>

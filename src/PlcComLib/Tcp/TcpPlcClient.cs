@@ -79,8 +79,7 @@ public sealed class TcpPlcClient(
     }
 
     /// <summary>Serialises and sends a strongly-typed telegram.</summary>
-    public async Task SendAsync<T>(T telegram, CancellationToken cancellationToken = default)
-        where T : ITypedS7Telegram<T>
+    public async Task SendAsync<T>(T telegram, CancellationToken cancellationToken = default) where T : ITypedS7Telegram<T>
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (!_isConnected || _stream == null)
@@ -155,9 +154,11 @@ public sealed class TcpPlcClient(
             try
             {
                 logger?.LogInformation("Connecting to {Host}:{Port}...", _config.Host, _config.Port);
-                _client = new TcpClient();
-                _client.SendTimeout = _config.TimeoutMs;
-                _client.ReceiveTimeout = _config.TimeoutMs;
+                _client = new TcpClient
+                {
+                    SendTimeout = _config.TimeoutMs,
+                    ReceiveTimeout = _config.TimeoutMs
+                };
                 await _client.ConnectAsync(_config.Host, _config.Port, ct);
                 _stream = _client.GetStream();
                 SetConnected(true, "Connected");
@@ -169,8 +170,7 @@ public sealed class TcpPlcClient(
             }
             catch (Exception ex)
             {
-                logger?.LogWarning(ex, "Connection to {Host}:{Port} failed. Retrying in {Interval} ms.",
-                    _config.Host, _config.Port, _config.ReconnectIntervalMs);
+                logger?.LogWarning(ex, "Connection to {Host}:{Port} failed. Retrying in {Interval} ms.",_config.Host, _config.Port, _config.ReconnectIntervalMs);
             }
             finally
             {
@@ -228,8 +228,7 @@ public sealed class TcpPlcClient(
                 if (consumed > 0)
                 {
                     // Definite ID mismatch — discard unrecognised byte(s) and keep scanning.
-                    logger?.LogWarning(
-                        "Unrecognised telegram ID in receive buffer; discarding {Count} byte(s).", consumed);
+                    logger?.LogWarning("Unrecognised telegram ID in receive buffer; discarding {Count} byte(s).", consumed);
                     int rem = data.Length - consumed;
                     accumulated.SetLength(0);
                     if (rem > 0) accumulated.Write(data, consumed, rem);
@@ -347,8 +346,7 @@ public sealed class TcpPlcClient(
     {
         _isConnected = connected;
         ConnectionStateChanged?.Invoke(this, new ConnectionStateChangedEventArgs(connected, reason));
-        logger?.LogInformation("Connection state: {State} ({Reason})",
-            connected ? "Connected" : "Disconnected", reason);
+        logger?.LogInformation("Connection state: {State} ({Reason})",connected ? "Connected" : "Disconnected", reason);
     }
 
     private void CloseConnection(string reason)
