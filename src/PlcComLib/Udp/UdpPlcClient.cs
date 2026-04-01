@@ -76,7 +76,7 @@ public sealed class UdpPlcClient(
     public async Task SendAsync(Telegram telegram, CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        if (!_isConnected || _udpClient == null)
+        if (!_isConnected || _udpClient is null)
             throw new InvalidOperationException("UDP client is not started.");
         await SendPayloadAsync(TelegramSerializer.Serialize(telegram, byteOrder), cancellationToken);
     }
@@ -85,7 +85,7 @@ public sealed class UdpPlcClient(
     public async Task SendAsync<T>(T telegram, CancellationToken cancellationToken = default) where T : ITypedS7Telegram<T>
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        if (!_isConnected || _udpClient == null)
+        if (!_isConnected || _udpClient is null)
             throw new InvalidOperationException("UDP client is not started.");
         await SendPayloadAsync(telegram.Serialize(byteOrder), cancellationToken);
     }
