@@ -14,7 +14,7 @@ A high-performance **.NET 10** communication library for bidirectional TCP/IP an
 - **MessageId-based Dispatch** – every typed telegram carries a 2-byte MessageId as the first wire bytes, eliminating size-collision ambiguity; byte order follows the connection setting
 - **Connection-Level Byte Order** – `WithByteOrder(ByteOrder.LittleEndian)` on the builder; byte order is a connection concern, not per-telegram
 - **Full S7 Data Type Support** – Bool, Byte/USInt, SInt, Word/UInt, Int, DWord/UDInt, DInt, LWord/ULInt, LInt, Real, LReal, Char, WChar, S7String, S7WString, Date, Time, TimeOfDay, DateAndTime, Raw
-- **Message Framing** – length-prefix (default) or fixed-length framers; plug in your own via `IMessageFramer`
+- **Message Framing** – length-prefix (default) or payload-length framer; plug in your own via `IMessageFramer`
 - **Thread-Safe** – `SemaphoreSlim`-guarded sends, `ConcurrentDictionary` client tracking
 - **Structured Logging** – injectable `ILogger` via `Microsoft.Extensions.Logging`
 
@@ -188,21 +188,21 @@ new TcpPlcClientBuilder()
     ...
 ```
 
-#### `FixedLengthFramer`
+#### `PayloadLengthFramer`
 
 ```
-Wire: [Payload: exactly N bytes]
+Wire: [TotalLength: UInt16 BE (2 bytes)][Payload: byte * (TotalLength - 2)]
 ```
 
-No header. Every message is exactly `N` bytes. The receiver buffers until `N` bytes are available, then delivers them.
+The first 2 bytes of every message encode the **total frame size** (including those 2 bytes themselves). The receiver reads 2 bytes, determines how many more to wait for, then delivers the payload.
 
-**Pros:** Zero overhead; compatible with legacy PLCs that send fixed-size blocks.  
-**Cons:** All messages must be exactly the same size; mismatches cause deserialization errors.
+**Pros:** Works with Siemens TSEND/TRCV — the length is a plain `WORD` DB variable, part of the raw payload.  
+**Use when:** The PLC side uses raw TSEND/TRCV and the DB starts with a `WORD` length field.
 
 ```csharp
 new TcpPlcClientBuilder()
     .ConnectTo("192.168.1.100", 2000)
-    .WithFixedLengthFramer(MachineStatus.WireSize)
+    .WithPayloadLengthFramer()
     ...
 ```
 
@@ -317,7 +317,7 @@ await using var client = new TcpPlcClientBuilder()
     .ConnectTo("192.168.1.100", 2000)       // PLC IP and port
     .WithReconnectInterval(TimeSpan.FromSeconds(3))
     .WithTimeout(TimeSpan.FromSeconds(10))
-    .WithLengthPrefixFramer()               // or WithFixedLengthFramer / WithFramer
+    .WithLengthPrefixFramer()               // or WithPayloadLengthFramer / WithFramer
     .WithByteOrder(ByteOrder.BigEndian)     // S7 default; omit for same effect
     .WithLogger(loggerFactory.CreateLogger<TcpPlcClient>())
     .RegisterTelegram<MachineStatus>()
@@ -453,7 +453,7 @@ public partial class DeviceCommand
 // Configure little-endian on the connection builder
 await using var client = new TcpPlcClientBuilder()
     .ConnectTo("10.0.0.5", 9000)
-    .WithFixedLengthFramer(DeviceCommand.WireSize)
+    .WithPayloadLengthFramer()
     .WithByteOrder(ByteOrder.LittleEndian)      // <-- connection-level byte order
     .RegisterTelegram<DeviceCommand>()
     .Build();
@@ -502,7 +502,7 @@ handled generically.
 | `WithReconnectInterval(interval)` | `interval`: `TimeSpan` | How long to wait between automatic reconnection attempts. Default: **5 s**. |
 | `WithTimeout(timeout)` | `timeout`: `TimeSpan` | Send/receive socket timeout. If no data flows within this period, the connection is reset. Default: **10 s**. |
 | `WithLengthPrefixFramer()` | — | 4-byte big-endian length header before each payload. **Default.** |
-| `WithFixedLengthFramer(frameSize)` | `frameSize`: exact bytes per message | No header; every message is exactly `frameSize` bytes. |
+| `WithPayloadLengthFramer()` | — | 2-byte big-endian total length embedded in payload. For Siemens TSEND/TRCV. |
 | `WithFramer(framer)` | `framer`: `IMessageFramer` | Plug in a fully custom framing implementation. |
 | `WithByteOrder(byteOrder)` | `byteOrder`: `ByteOrder` | `BigEndian` (S7 default) or `LittleEndian`. Applied to all data fields on this connection. |
 | `WithLogger(logger)` | `logger`: `ILogger<TcpPlcClient>` | Structured logging via Microsoft.Extensions.Logging. |
@@ -518,7 +518,7 @@ handled generically.
 | `WithMaxConnections(max)` | `max`: int | Maximum concurrent client connections. Default: **10**. |
 | `WithTimeout(timeout)` | `timeout`: `TimeSpan` | Per-client send/receive socket timeout. Default: **10 s**. |
 | `WithLengthPrefixFramer()` | — | 4-byte big-endian length header. **Default.** |
-| `WithFixedLengthFramer(frameSize)` | `frameSize`: int | Fixed-size messages, no header. |
+| `WithPayloadLengthFramer()` | — | 2-byte big-endian total length embedded in payload. For Siemens TSEND/TRCV. |
 | `WithFramer(framer)` | `framer`: `IMessageFramer` | Custom framing implementation. |
 | `WithByteOrder(byteOrder)` | `byteOrder`: `ByteOrder` | `BigEndian` (default) or `LittleEndian`. |
 | `WithLogger(logger)` | `logger`: `ILogger<TcpPlcServer>` | Structured logging. |
@@ -617,7 +617,7 @@ src/
                     UnknownTelegramEventArgs), enums
     DataTypes/     ByteOrder, S7DataType, ByteSwapper, S7String/S7WString,
                    S7TypeConverter
-    Framing/       IMessageFramer, LengthPrefixFramer, FixedLengthFramer
+    Framing/       IMessageFramer, LengthPrefixFramer, PayloadLengthFramer
     Telegrams/     ITelegram, ITypedS7Telegram<T>, TelegramField,
                    TelegramDefinition, Telegram, TelegramSerializer,
                    TelegramRegistry
@@ -642,7 +642,7 @@ tests/
 | Framer | Wire format | Best for |
 |--------|-------------|----------|
 | `LengthPrefixFramer` (default) | `[Length:UInt32 BE][Payload]` | TCP streams of varying-size messages |
-| `FixedLengthFramer(n)` | `[Payload]` exactly n bytes | Legacy PLCs or fixed-size protocols |
+| `PayloadLengthFramer` | `[TotalLength:UInt16 BE][Payload]` | Siemens TSEND/TRCV with WORD length in DB |
 | Custom `IMessageFramer` | Any proprietary scheme | STX/ETX, SLIP, custom headers, etc. |
 
 See [Custom `IMessageFramer`](#custom-imessageframer) above for a complete implementation example.

@@ -90,23 +90,21 @@ public sealed class TcpPlcClientBuilder
     }
 
     /// <summary>
-    /// Use a fixed-length framer: every frame is exactly <paramref name="frameSize"/> bytes,
-    /// with no framing header.
+    /// Use the built-in 2-byte payload-embedded length framer.
     /// </summary>
-    /// <param name="frameSize">
-    /// The exact byte length of every expected message. Must match <c>T.WireSize</c> for
-    /// the telegram type you are exchanging. Use this when the remote device sends fixed-size
-    /// TCP packets without a length header — for example, some legacy PLC communication
-    /// layers that transmit a fixed-size status block at a regular interval.
-    /// </param>
     /// <remarks>
-    /// Because there is no length header, the receiver buffers incoming bytes until exactly
-    /// <paramref name="frameSize"/> bytes are available, then hands them off as one complete
-    /// message. Mismatches in frame size cause deserialization errors.
+    /// <para>
+    /// Wire format: <c>[TotalLength: UInt16 BE (2 bytes)][Payload: byte * (TotalLength - 2)]</c>.
+    /// The first 2 bytes of every message encode the total frame length including those 2 bytes.
+    /// </para>
+    /// <para>
+    /// Use this framer when communicating with a Siemens PLC via TSEND/TRCV, where the length
+    /// field is a normal WORD variable at the start of the DB block and is part of the raw payload.
+    /// </para>
     /// </remarks>
-    public TcpPlcClientBuilder WithFixedLengthFramer(int frameSize)
+    public TcpPlcClientBuilder WithPayloadLengthFramer()
     {
-        _framer = new FixedLengthFramer(frameSize);
+        _framer = new PayloadLengthFramer();
         return this;
     }
 
