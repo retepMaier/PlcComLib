@@ -14,18 +14,21 @@ public sealed class TelegramDefinition
     public string? Description { get; set; }
 
     /// <summary>
-    /// 2-byte MessageId used for typed-telegram dispatch and as the first two bytes of
-    /// every serialised payload. Set at registration time via
-    /// <c>RegisterTelegram&lt;T&gt;().WithMessageId(id)</c> on the connection builder.
-    /// <c>0</c> means not set (legacy untyped definitions still work via size-based matching).
+    /// Numeric MessageId used for typed-telegram dispatch.
+    /// Set at registration time via <c>RegisterTelegram&lt;T&gt;().WithMessageId(id)</c>
+    /// on the connection builder.
+    /// The storage type is <see cref="long"/> so that 1-, 2-, 4- and 8-byte S7 field types
+    /// (e.g. Byte, Word, DWord, LWord and their signed equivalents) can all be used as the
+    /// id discriminator without truncation.
+    /// <c>0</c> means not set — legacy untyped definitions are matched by wire size instead.
     /// </summary>
-    public ushort MessageId { get; set; }
+    public long MessageId { get; set; }
 
     /// <summary>
-    /// Alias for <see cref="MessageId"/>. The unique 2-byte identifier that identifies
+    /// Alias for <see cref="MessageId"/>. The numeric identifier that identifies
     /// this telegram type on the wire.
     /// </summary>
-    public ushort TelegramId
+    public long TelegramId
     {
         get => MessageId;
         set => MessageId = value;
