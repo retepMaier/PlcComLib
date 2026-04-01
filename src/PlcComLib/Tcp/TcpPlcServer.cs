@@ -228,7 +228,20 @@ public sealed class TcpPlcServer : IPlcConnection
         while (true)
         {
             var data = accumulated.ToArray();
-            if (!_framer.TryExtract(data, out var message, out int consumed)) break;
+            if (!_framer.TryExtract(data, out var message, out int consumed))
+            {
+                if (consumed > 0)
+                {
+                    // Definite ID mismatch — discard unrecognised byte(s) and keep scanning.
+                    _logger?.LogWarning(
+                        "Unrecognised telegram ID in receive buffer; discarding {Count} byte(s).", consumed);
+                    int rem = data.Length - consumed;
+                    accumulated.SetLength(0);
+                    if (rem > 0) accumulated.Write(data, consumed, rem);
+                    continue;
+                }
+                break; // Insufficient data — wait for more bytes.
+            }
             int remaining = data.Length - consumed;
             accumulated.SetLength(0);
             if (remaining > 0) accumulated.Write(data, consumed, remaining);

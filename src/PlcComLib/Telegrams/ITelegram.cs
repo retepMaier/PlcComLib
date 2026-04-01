@@ -8,10 +8,8 @@ namespace PlcComLib.Telegrams;
 public interface ITelegram
 {
     /// <summary>
-    /// The 2-byte telegram identifier that is prepended to every
-    /// serialised payload and used to dispatch incoming messages to the correct
-    /// handler. Set via <c>RegisterTelegram&lt;T&gt;().WithMessageId(id)</c> on the
-    /// connection builder. The byte order follows the connection's <c>ByteOrder</c> setting.
+    /// The telegram identifier configured via <c>RegisterTelegram&lt;T&gt;().WithMessageId(id)</c>
+    /// on the connection builder. Returns <c>0</c> until registration.
     /// </summary>
     ushort TelegramId { get; }
 }

@@ -17,108 +17,36 @@ public class WireFormatTests
     // ── Wire layout ────────────────────────────────────────────────────────────
 
     [Fact]
-    public void Serialize_FirstTwoBytes_AreTelegramId_BigEndian()
+    public void Serialize_DataFields_StartAtOffset0()
     {
-        TestStatusTelegram.Definition.MessageId = 0x0001;
-        try
-        {
-            var t = new TestStatusTelegram { MachineId = 1 };
-            var bytes = t.Serialize(ByteOrder.BigEndian);
+        // Wire layout: [MachineId: 2][Speed: 4][Label: 12] — no prepended header.
+        var t = new TestStatusTelegram { MachineId = 0xABCD };
+        var bytes = t.Serialize(ByteOrder.BigEndian);
 
-            BinaryPrimitives.ReadUInt16BigEndian(bytes.AsSpan(0)).Should().Be(0x0001);
-        }
-        finally { TestStatusTelegram.Definition.MessageId = 0; }
+        ushort machineId = BinaryPrimitives.ReadUInt16BigEndian(bytes.AsSpan(0));
+        machineId.Should().Be(0xABCD);
     }
 
     [Fact]
-    public void Serialize_FirstTwoBytes_AreTelegramId_LittleEndian()
+    public void Serialize_TotalSize_IsSumOfDataFields()
     {
-        TestStatusTelegram.Definition.MessageId = 0x0001;
-        try
-        {
-            var t = new TestStatusTelegram { MachineId = 1 };
-            var bytes = t.Serialize(ByteOrder.LittleEndian);
-
-            BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan(0)).Should().Be(0x0001);
-        }
-        finally { TestStatusTelegram.Definition.MessageId = 0; }
-    }
-
-    [Fact]
-    public void Serialize_DataFields_StartAtOffset2()
-    {
-        // Wire layout: [TelegramId: 2][MachineId: 2][Speed: 4][Label: 12]
-        // No embedded length field.
-        TestStatusTelegram.Definition.MessageId = 0x0001;
-        try
-        {
-            var t = new TestStatusTelegram { MachineId = 0xABCD };
-            var bytes = t.Serialize(ByteOrder.BigEndian);
-
-            ushort machineId = BinaryPrimitives.ReadUInt16BigEndian(bytes.AsSpan(2));
-            machineId.Should().Be(0xABCD);
-        }
-        finally { TestStatusTelegram.Definition.MessageId = 0; }
-    }
-
-    [Fact]
-    public void Serialize_NoEmbeddedLength_TotalSizeIs_TelegramIdPlusDataFields()
-    {
-        // 2 (TelegramId) + 2 (Word) + 4 (Real) + 12 (S7String maxLen=10) = 20
+        // 2 (Word) + 4 (Real) + 12 (S7String maxLen=10) = 18
         var bytes = new TestStatusTelegram().Serialize();
-        bytes.Length.Should().Be(20);
+        bytes.Length.Should().Be(18);
     }
 
-    // ── Deserialize validation ─────────────────────────────────────────────────
+    // ── Deserialize ────────────────────────────────────────────────────────────
 
     [Fact]
-    public void Deserialize_ValidatesTelegramId_WhenMessageIdIsNonZero()
+    public void Deserialize_Succeeds_RoundTrip()
     {
-        TestStatusTelegram.Definition.MessageId = 0x0001;
-        try
-        {
-            var bytes = new TestStatusTelegram { MachineId = 1 }.Serialize();
-            bytes[0] = 0x00;
-            bytes[1] = 0x05; // corrupt TelegramId
-
-            var act = () => TestStatusTelegram.Deserialize(bytes);
-            act.Should().Throw<ArgumentException>().WithMessage("*TelegramId mismatch*");
-        }
-        finally { TestStatusTelegram.Definition.MessageId = 0; }
-    }
-
-    [Fact]
-    public void Deserialize_SkipsIdValidation_WhenMessageIdIsZero()
-    {
-        // MessageId == 0 means "not registered yet"; Deserialize skips id check.
-        TestStatusTelegram.Definition.MessageId = 0;
         var original = new TestStatusTelegram { MachineId = 99, Speed = 1.5f, Label = "ok" };
-        var bytes = original.Serialize();
-        // Corrupt the first 2 bytes — should not throw since MessageId is 0.
-        bytes[0] = 0xAA;
-        bytes[1] = 0xBB;
-
+        var bytes    = original.Serialize();
         var restored = TestStatusTelegram.Deserialize(bytes);
+
         restored.MachineId.Should().Be(99);
         restored.Speed.Should().BeApproximately(1.5f, 1e-4f);
         restored.Label.Should().Be("ok");
-    }
-
-    [Fact]
-    public void Deserialize_Succeeds_WhenTelegramIdMatches()
-    {
-        TestStatusTelegram.Definition.MessageId = 0x0001;
-        try
-        {
-            var original = new TestStatusTelegram { MachineId = 99, Speed = 1.5f, Label = "ok" };
-            var bytes    = original.Serialize();
-            var restored = TestStatusTelegram.Deserialize(bytes);
-
-            restored.MachineId.Should().Be(99);
-            restored.Speed.Should().BeApproximately(1.5f, 1e-4f);
-            restored.Label.Should().Be("ok");
-        }
-        finally { TestStatusTelegram.Definition.MessageId = 0; }
     }
 
     // ── Definition structure ───────────────────────────────────────────────────
@@ -132,10 +60,11 @@ public class WireFormatTests
     }
 
     [Fact]
-    public void Definition_HasNoEmbeddedLengthField()
+    public void Definition_HasNoSentinelHeaderFields()
     {
-        // The old __MessageLength field is gone.
+        // The generator adds no __TelegramId or __MessageLength sentinel fields.
         var def = TestStatusTelegram.Definition;
+        def.Fields.Should().NotContain(f => f.Name == "__TelegramId");
         def.Fields.Should().NotContain(f => f.Name == "__MessageLength");
     }
 
