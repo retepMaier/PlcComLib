@@ -45,9 +45,7 @@ public sealed class S7TelegramGenerator : IIncrementalGenerator
     // Syntax → model
     // ──────────────────────────────────────────────────────────────────────────
 
-    private static TelegramClassInfo? Transform(
-        GeneratorSyntaxContext ctx,
-        System.Threading.CancellationToken ct)
+    private static TelegramClassInfo? Transform(GeneratorSyntaxContext ctx,System.Threading.CancellationToken ct)
     {
         var cls = (ClassDeclarationSyntax)ctx.Node;
         if (ctx.SemanticModel.GetDeclaredSymbol(cls, ct) is not INamedTypeSymbol symbol)
@@ -164,21 +162,21 @@ public sealed class S7TelegramGenerator : IIncrementalGenerator
         return null;
     }
 
-    private static string GetPropTypeName(ITypeSymbol type) => type.SpecialType switch
-    {
-        SpecialType.System_Boolean => "bool",
-        SpecialType.System_Byte    => "byte",
-        SpecialType.System_SByte   => "sbyte",
-        SpecialType.System_UInt16  => "ushort",
-        SpecialType.System_Int16   => "short",
-        SpecialType.System_UInt32  => "uint",
-        SpecialType.System_Int32   => "int",
-        SpecialType.System_UInt64  => "ulong",
-        SpecialType.System_Int64   => "long",
-        SpecialType.System_Single  => "float",
-        SpecialType.System_Double  => "double",
-        _                          => type.ToDisplayString(),
-    };
+    //private static string GetPropTypeName(ITypeSymbol type) => type.SpecialType switch
+    //{
+    //    SpecialType.System_Boolean => "bool",
+    //    SpecialType.System_Byte    => "byte",
+    //    SpecialType.System_SByte   => "sbyte",
+    //    SpecialType.System_UInt16  => "ushort",
+    //    SpecialType.System_Int16   => "short",
+    //    SpecialType.System_UInt32  => "uint",
+    //    SpecialType.System_Int32   => "int",
+    //    SpecialType.System_UInt64  => "ulong",
+    //    SpecialType.System_Int64   => "long",
+    //    SpecialType.System_Single  => "float",
+    //    SpecialType.System_Double  => "double",
+    //    _                          => type.ToDisplayString(),
+    //};
 
     // ──────────────────────────────────────────────────────────────────────────
     // Code emission

@@ -170,7 +170,7 @@ public sealed class TcpPlcClient(
             }
             catch (Exception ex)
             {
-                logger?.LogWarning(ex, "Connection to {Host}:{Port} failed. Retrying in {Interval} ms.",_config.Host, _config.Port, _config.ReconnectIntervalMs);
+                logger?.LogWarning(ex, "Connection to {Host}:{Port} failed. Retrying in {Interval} ms.", _config.Host, _config.Port, _config.ReconnectIntervalMs);
             }
             finally
             {
@@ -272,9 +272,7 @@ public sealed class TcpPlcClient(
         }
 
         // 3. No match — raise UnknownTelegramReceived
-        logger?.LogWarning(
-            "No matching telegram definition for payload of {Length} bytes.",
-            payload.Length);
+        logger?.LogWarning("No matching telegram definition for payload of {Length} bytes.", payload.Length);
         UnknownTelegramReceived?.Invoke(this, new UnknownTelegramEventArgs(payload, byteOrder));
     }
 
@@ -291,9 +289,7 @@ public sealed class TcpPlcClient(
         int fieldEnd = def.LengthByteOffset + S7TypeConverter.GetWireSize(def.LengthDataType);
         if (payload.Length < fieldEnd)
         {
-            logger?.LogWarning(
-                "Telegram '{Id}': length field at offset {Offset} extends beyond payload ({PayloadLen} bytes).",
-                def.Id, def.LengthByteOffset, payload.Length);
+            logger?.LogWarning("Telegram '{Id}': length field at offset {Offset} extends beyond payload ({PayloadLen} bytes).", def.Id, def.LengthByteOffset, payload.Length);
             UnknownTelegramReceived?.Invoke(this, new UnknownTelegramEventArgs(payload, byteOrder));
             return false;
         }
@@ -301,9 +297,7 @@ public sealed class TcpPlcClient(
         long receivedLength = TelegramIdFramer.ReadLength(payload, def.LengthByteOffset, def.LengthDataType, byteOrder);
         if (receivedLength != def.ConfiguredWireSize)
         {
-            logger?.LogWarning(
-                "Telegram '{Id}': length field mismatch — expected {Expected}, got {Received}.",
-                def.Id, def.ConfiguredWireSize, receivedLength);
+            logger?.LogWarning("Telegram '{Id}': length field mismatch — expected {Expected}, got {Received}.", def.Id, def.ConfiguredWireSize, receivedLength);
             UnknownTelegramReceived?.Invoke(this, new UnknownTelegramEventArgs(payload, byteOrder));
             return false;
         }
@@ -346,7 +340,7 @@ public sealed class TcpPlcClient(
     {
         _isConnected = connected;
         ConnectionStateChanged?.Invoke(this, new ConnectionStateChangedEventArgs(connected, reason));
-        logger?.LogInformation("Connection state: {State} ({Reason})",connected ? "Connected" : "Disconnected", reason);
+        logger?.LogInformation("Connection state: {State} ({Reason})", connected ? "Connected" : "Disconnected", reason);
     }
 
     private void CloseConnection(string reason)

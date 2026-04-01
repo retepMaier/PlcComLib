@@ -34,8 +34,7 @@ public static class TelegramSerializer
         {
             int size = field.WireSize;
             if (offset + size > data.Length)
-                throw new InvalidDataException(
-                    $"Buffer too short at field '{field.Name}'. Offset={offset}, Required={size}, Remaining={data.Length - offset}.");
+                throw new InvalidDataException($"Buffer too short at field '{field.Name}'. Offset={offset}, Required={size}, Remaining={data.Length - offset}.");
             var value = S7TypeConverter.Deserialize(field.DataType, data.Slice(offset, size), byteOrder);
             telegram.SetValue(field.Name, value);
             offset += size;

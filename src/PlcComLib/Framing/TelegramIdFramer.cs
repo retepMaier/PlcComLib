@@ -112,8 +112,7 @@ public sealed class TelegramIdFramer : IMessageFramer
     /// <paramref name="offset"/> using the specified <paramref name="dataType"/> and byte order.
     /// Used by the framer and by dispatch layers to identify an incoming telegram.
     /// </summary>
-    public static long ReadId(ReadOnlySpan<byte> buffer, int offset, S7DataType dataType,
-        ByteOrder byteOrder = ByteOrder.BigEndian)
+    public static long ReadId(ReadOnlySpan<byte> buffer, int offset, S7DataType dataType,ByteOrder byteOrder = ByteOrder.BigEndian)
     {
         bool le = byteOrder == ByteOrder.LittleEndian;
         return dataType switch
