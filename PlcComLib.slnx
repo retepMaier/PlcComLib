@@ -5,6 +5,7 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/PlcComLib.Tests/PlcComLib.Tests.csproj" />
+    <Project Path="PlcComLib.Playground/PlcComLib.Playground.csproj" Id="8bd369aa-911d-42ec-b800-f79e0c3633d7" />
     <Project Path="tests/PlcComLib.SourceGenerator.Tests/PlcComLib.SourceGenerator.Tests.csproj" />
   </Folder>
 </Solution>

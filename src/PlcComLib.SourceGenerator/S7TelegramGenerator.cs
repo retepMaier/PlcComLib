@@ -212,8 +212,8 @@ public sealed class S7TelegramGenerator : IIncrementalGenerator
         sb.AppendLine();
 
         // ── ITelegram instance member ─────────────────────────────────────────
-        sb.AppendLine("    /// <summary>The telegram identifier; equals <c>Definition.MessageId</c> set via the connection builder.</summary>");
-        sb.AppendLine("    public ushort TelegramId => _s7Definition.MessageId;");
+        sb.AppendLine("    /// <summary>The telegram identifier; equals <c>(ushort)Definition.MessageId</c> set via the connection builder.</summary>");
+        sb.AppendLine("    public ushort TelegramId => (ushort)_s7Definition.MessageId;");
         sb.AppendLine();
 
         // ── Definition ────────────────────────────────────────────────────────
@@ -248,7 +248,7 @@ public sealed class S7TelegramGenerator : IIncrementalGenerator
         sb.AppendLine("    {");
         sb.AppendLine("        bool __le = byteOrder == global::PlcComLib.DataTypes.ByteOrder.LittleEndian;");
         sb.AppendLine($"        var __buf = new byte[WireSize];");
-        sb.AppendLine("        if (__le) global::System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(__buf.AsSpan(0), _s7Definition.MessageId); else global::System.Buffers.Binary.BinaryPrimitives.WriteUInt16BigEndian(__buf.AsSpan(0), _s7Definition.MessageId);");
+        sb.AppendLine("        if (__le) global::System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(__buf.AsSpan(0), (ushort)_s7Definition.MessageId); else global::System.Buffers.Binary.BinaryPrimitives.WriteUInt16BigEndian(__buf.AsSpan(0), (ushort)_s7Definition.MessageId);");
         int offset = 2; // data fields start after the 2-byte TelegramId
         foreach (var f in info.Fields)
         {
