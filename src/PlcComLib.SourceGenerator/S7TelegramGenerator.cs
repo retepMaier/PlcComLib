@@ -67,8 +67,10 @@ public sealed class S7TelegramGenerator : IIncrementalGenerator
         if (telegramAttr is null) return null;
 
         ushort messageId = 0;
-        string? msgIdPropName   = null;
+        string? msgIdPropName     = null;
+        string? msgIdPropType     = null;
         string? msgLengthPropName = null;
+        string? msgLengthPropType = null;
 
         var fields = new List<FieldInfo>();
         foreach (var member in cls.Members.OfType<PropertyDeclarationSyntax>())
@@ -87,11 +89,13 @@ public sealed class S7TelegramGenerator : IIncrementalGenerator
                     if (a.ConstructorArguments.Length >= 1 && a.ConstructorArguments[0].Value is not null)
                         messageId = (ushort)System.Convert.ToUInt32(a.ConstructorArguments[0].Value);
                     msgIdPropName = prop.Name;
+                    msgIdPropType = GetPropTypeName(prop.Type);
                 }
                 else if (attrFqn == MsgLengthAttrFqn)
                 {
                     isMsgLength = true;
                     msgLengthPropName = prop.Name;
+                    msgLengthPropType = GetPropTypeName(prop.Type);
                 }
             }
 
@@ -110,7 +114,9 @@ public sealed class S7TelegramGenerator : IIncrementalGenerator
             symbol.Name, ns, messageId,
             fields.ToImmutableArray(),
             msgIdPropName,
-            msgLengthPropName);
+            msgIdPropType,
+            msgLengthPropName,
+            msgLengthPropType);
     }
 
     private static FieldInfo? BuildFieldInfo(ImmutableArray<AttributeData> attrs, string name)
@@ -195,6 +201,22 @@ public sealed class S7TelegramGenerator : IIncrementalGenerator
         return null;
     }
 
+    private static string GetPropTypeName(ITypeSymbol type) => type.SpecialType switch
+    {
+        SpecialType.System_Boolean => "bool",
+        SpecialType.System_Byte    => "byte",
+        SpecialType.System_SByte   => "sbyte",
+        SpecialType.System_UInt16  => "ushort",
+        SpecialType.System_Int16   => "short",
+        SpecialType.System_UInt32  => "uint",
+        SpecialType.System_Int32   => "int",
+        SpecialType.System_UInt64  => "ulong",
+        SpecialType.System_Int64   => "long",
+        SpecialType.System_Single  => "float",
+        SpecialType.System_Double  => "double",
+        _                          => type.ToDisplayString(),
+    };
+
     // ──────────────────────────────────────────────────────────────────────────
     // Code emission
     // ──────────────────────────────────────────────────────────────────────────
@@ -226,14 +248,18 @@ public sealed class S7TelegramGenerator : IIncrementalGenerator
         // ── [MsgId] partial property implementation (any user-chosen name) ────
         if (info.MsgIdPropName is not null)
         {
-            sb.AppendLine($"    public partial ushort {info.MsgIdPropName} => MessageId;");
+            var idType = info.MsgIdPropType ?? "ushort";
+            var idExpr = idType == "ushort" ? "MessageId" : $"({idType})MessageId";
+            sb.AppendLine($"    public partial {idType} {info.MsgIdPropName} => {idExpr};");
             sb.AppendLine();
         }
 
         // ── [MsgLength] partial property implementation (any user-chosen name) ─
         if (info.MsgLengthPropName is not null)
         {
-            sb.AppendLine($"    public partial int {info.MsgLengthPropName} => WireSize;");
+            var lenType = info.MsgLengthPropType ?? "int";
+            var lenExpr = lenType == "int" ? "WireSize" : $"({lenType})WireSize";
+            sb.AppendLine($"    public partial {lenType} {info.MsgLengthPropName} => {lenExpr};");
             sb.AppendLine();
         }
 
@@ -476,7 +502,9 @@ public sealed class S7TelegramGenerator : IIncrementalGenerator
         ushort MessageId,
         ImmutableArray<FieldInfo> Fields,
         string? MsgIdPropName,
-        string? MsgLengthPropName)
+        string? MsgIdPropType,
+        string? MsgLengthPropName,
+        string? MsgLengthPropType)
     {
         public string HintName =>
             Namespace is null ? ClassName : $"{Namespace}.{ClassName}";
@@ -501,7 +529,9 @@ public sealed class S7TelegramGenerator : IIncrementalGenerator
         /// Marks a <c>partial</c> property as the message-id field for this telegram.
         /// The decorated property can have any name; the generator reads the <c>messageId</c>
         /// value from this attribute and uses it for wire framing.
-        /// The property must be declared as <c>public partial ushort YourName { get; }</c>.
+        /// The property may be declared with any numeric type, e.g.
+        /// <c>public partial ushort YourName { get; }</c> or
+        /// <c>public partial int YourName { get; }</c>.
         /// </summary>
         [System.AttributeUsage(System.AttributeTargets.Property)]
         public sealed class MsgIdAttribute : System.Attribute
@@ -514,7 +544,9 @@ public sealed class S7TelegramGenerator : IIncrementalGenerator
         /// Marks a <c>partial</c> property as the wire-length field for this telegram.
         /// The decorated property can have any name; the generator implements it to return
         /// the total wire size (including the 2-byte message-id header).
-        /// The property must be declared as <c>public partial int YourName { get; }</c>.
+        /// The property may be declared with any numeric type, e.g.
+        /// <c>public partial int YourName { get; }</c> or
+        /// <c>public partial ushort YourName { get; }</c>.
         /// </summary>
         [System.AttributeUsage(System.AttributeTargets.Property)]
         public sealed class MsgLengthAttribute : System.Attribute { }
