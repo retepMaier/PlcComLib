@@ -16,6 +16,7 @@ public sealed class TcpPlcClientBuilder
     private TimeSpan _reconnectInterval = TimeSpan.FromSeconds(5);
     private TimeSpan _timeout = TimeSpan.FromSeconds(10);
     private IMessageFramer? _framer;
+    private bool _useTelegramIdFramer;
     private ILogger<TcpPlcClient>? _logger;
     private readonly TelegramRegistry _registry = new();
     private ByteOrder _byteOrder = ByteOrder.BigEndian;
@@ -105,6 +106,50 @@ public sealed class TcpPlcClientBuilder
     public TcpPlcClientBuilder WithPayloadLengthFramer()
     {
         _framer = new PayloadLengthFramer();
+        _useTelegramIdFramer = false;
+        return this;
+    }
+
+    /// <summary>
+    /// Use the built-in 2-byte payload-embedded length framer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Wire format: <c>[TotalLength: UInt16 BE (2 bytes)][Payload: byte * (TotalLength - 2)]</c>.
+    /// The first 2 bytes of every message encode the total frame length (including those 2 bytes)
+    /// as defined by the <c>[MsgLength]</c> attribute on the telegram type.
+    /// </para>
+    /// <para>
+    /// Use this framer when the PLC's DB block starts with a length field (<c>[MsgLength]</c>).
+    /// </para>
+    /// </remarks>
+    public TcpPlcClientBuilder WithLengthFramer()
+    {
+        _framer = new PayloadLengthFramer();
+        _useTelegramIdFramer = false;
+        return this;
+    }
+
+    /// <summary>
+    /// Use the built-in TelegramId-based framer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The first 2 bytes of every message are the TelegramId (from <c>[MsgId]</c>). The framer
+    /// looks up the expected total wire size for that TelegramId from the registered telegram
+    /// definitions and waits until that many bytes are available.
+    /// </para>
+    /// <para>
+    /// Use this framer when the PLC's DB block starts with the telegram identifier
+    /// (<c>[MsgId]</c>) and all telegram types have a fixed wire size.
+    /// Call <see cref="RegisterTelegram{T}"/> for every telegram type before calling
+    /// <see cref="Build"/> so the framer can resolve frame sizes.
+    /// </para>
+    /// </remarks>
+    public TcpPlcClientBuilder WithTelegramIdFramer()
+    {
+        _framer = null;
+        _useTelegramIdFramer = true;
         return this;
     }
 
@@ -215,6 +260,9 @@ public sealed class TcpPlcClientBuilder
             ReconnectIntervalMs = (int)_reconnectInterval.TotalMilliseconds,
             TimeoutMs = (int)_timeout.TotalMilliseconds,
         };
-        return new TcpPlcClient(config, _registry, _framer, _logger, _byteOrder);
+        var framer = _useTelegramIdFramer
+            ? new TelegramIdFramer(_registry.Definitions, _byteOrder)
+            : _framer;
+        return new TcpPlcClient(config, _registry, framer, _logger, _byteOrder);
     }
 }

@@ -20,6 +20,18 @@ public interface IPlcConnection : IAsyncDisposable
     /// </summary>
     event EventHandler<UnknownTelegramEventArgs> UnknownTelegramReceived;
 
+    /// <summary>
+    /// Fired immediately after raw bytes (including any framing) are written to the network.
+    /// Subscribe to capture the exact bytes sent over the wire for diagnostic purposes.
+    /// </summary>
+    event EventHandler<RawBytesEventArgs> RawBytesSent;
+
+    /// <summary>
+    /// Fired immediately after raw bytes are read from the network (before framing is parsed).
+    /// Subscribe to capture the exact bytes received over the wire for diagnostic purposes.
+    /// </summary>
+    event EventHandler<RawBytesEventArgs> RawBytesReceived;
+
     /// <summary>Gets the current connection state.</summary>
     bool IsConnected { get; }
 
@@ -31,6 +43,19 @@ public interface IPlcConnection : IAsyncDisposable
 
     /// <summary>Sends a serialised telegram to the remote side.</summary>
     Task SendAsync(Telegram telegram, CancellationToken cancellationToken = default);
+}
+
+/// <summary>Event args carrying raw bytes from the wire, used for diagnostic events.</summary>
+public sealed class RawBytesEventArgs : EventArgs
+{
+    public RawBytesEventArgs(byte[] data)
+    {
+        ArgumentNullException.ThrowIfNull(data);
+        Data = data;
+    }
+
+    /// <summary>The raw bytes transferred over the network.</summary>
+    public byte[] Data { get; }
 }
 
 /// <summary>Event args for a received telegram.</summary>

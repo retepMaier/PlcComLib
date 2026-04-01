@@ -35,6 +35,12 @@ public sealed class UdpPlcServer : IPlcConnection
     /// </summary>
     public event EventHandler<UnknownTelegramEventArgs>? UnknownTelegramReceived;
 
+    /// <summary>Fired immediately after raw bytes are sent over UDP.</summary>
+    public event EventHandler<RawBytesEventArgs>? RawBytesSent;
+
+    /// <summary>Fired immediately after raw bytes are received over UDP.</summary>
+    public event EventHandler<RawBytesEventArgs>? RawBytesReceived;
+
     public bool IsConnected => _isConnected;
 
     public UdpPlcServer(
@@ -117,7 +123,11 @@ public sealed class UdpPlcServer : IPlcConnection
     private async Task SendToEndpointAsync(byte[] payload, IPEndPoint endpoint, CancellationToken ct)
     {
         await _sendLock.WaitAsync(ct);
-        try   { await _udpClient!.SendAsync(payload, endpoint, ct); }
+        try
+        {
+            await _udpClient!.SendAsync(payload, endpoint, ct);
+            RawBytesSent?.Invoke(this, new RawBytesEventArgs(payload));
+        }
         finally { _sendLock.Release(); }
     }
 
@@ -157,6 +167,7 @@ public sealed class UdpPlcServer : IPlcConnection
                 break;
             }
             _lastSenderEndpoint = result.RemoteEndPoint;
+            RawBytesReceived?.Invoke(this, new RawBytesEventArgs(result.Buffer));
             DispatchTelegram(result.Buffer);
         }
     }

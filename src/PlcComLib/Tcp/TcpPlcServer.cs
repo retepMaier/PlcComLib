@@ -38,6 +38,12 @@ public sealed class TcpPlcServer : IPlcConnection
     /// </summary>
     public event EventHandler<UnknownTelegramEventArgs>? UnknownTelegramReceived;
 
+    /// <summary>Fired immediately after raw bytes are written to a client socket.</summary>
+    public event EventHandler<RawBytesEventArgs>? RawBytesSent;
+
+    /// <summary>Fired immediately after raw bytes are read from a client socket.</summary>
+    public event EventHandler<RawBytesEventArgs>? RawBytesReceived;
+
     public bool IsConnected => _isConnected;
 
     public TcpPlcServer(
@@ -90,6 +96,7 @@ public sealed class TcpPlcServer : IPlcConnection
         ObjectDisposedException.ThrowIf(_disposed, this);
         var framed = _framer.Frame(TelegramSerializer.Serialize(telegram, _byteOrder));
         await Task.WhenAll(_clients.Values.Select(c => c.SendAsync(framed, cancellationToken)));
+        RawBytesSent?.Invoke(this, new RawBytesEventArgs(framed));
     }
 
     /// <summary>Broadcasts a strongly-typed telegram to all connected clients.</summary>
@@ -99,6 +106,7 @@ public sealed class TcpPlcServer : IPlcConnection
         ObjectDisposedException.ThrowIf(_disposed, this);
         var framed = _framer.Frame(telegram.Serialize(_byteOrder));
         await Task.WhenAll(_clients.Values.Select(c => c.SendAsync(framed, cancellationToken)));
+        RawBytesSent?.Invoke(this, new RawBytesEventArgs(framed));
     }
 
     // ── Send (unicast) ────────────────────────────────────────────────────────
@@ -108,7 +116,9 @@ public sealed class TcpPlcServer : IPlcConnection
     {
         if (!_clients.TryGetValue(clientId, out var ctx))
             throw new KeyNotFoundException($"Client {clientId} not found.");
-        await ctx.SendAsync(_framer.Frame(TelegramSerializer.Serialize(telegram, _byteOrder)), cancellationToken);
+        var framed = _framer.Frame(TelegramSerializer.Serialize(telegram, _byteOrder));
+        await ctx.SendAsync(framed, cancellationToken);
+        RawBytesSent?.Invoke(this, new RawBytesEventArgs(framed));
     }
 
     /// <summary>Sends a strongly-typed telegram to a specific client.</summary>
@@ -117,7 +127,9 @@ public sealed class TcpPlcServer : IPlcConnection
     {
         if (!_clients.TryGetValue(clientId, out var ctx))
             throw new KeyNotFoundException($"Client {clientId} not found.");
-        await ctx.SendAsync(_framer.Frame(telegram.Serialize(_byteOrder)), cancellationToken);
+        var framed = _framer.Frame(telegram.Serialize(_byteOrder));
+        await ctx.SendAsync(framed, cancellationToken);
+        RawBytesSent?.Invoke(this, new RawBytesEventArgs(framed));
     }
 
     // ── Typed subscription ────────────────────────────────────────────────────
@@ -171,6 +183,9 @@ public sealed class TcpPlcServer : IPlcConnection
                 try { bytesRead = await ctx.Stream.ReadAsync(buffer, ct); }
                 catch { break; }
                 if (bytesRead == 0) break;
+                var received = new byte[bytesRead];
+                Array.Copy(buffer, received, bytesRead);
+                RawBytesReceived?.Invoke(this, new RawBytesEventArgs(received));
                 accumulated.Write(buffer, 0, bytesRead);
                 ProcessBuffer(accumulated, ctx.Id);
             }

@@ -38,6 +38,12 @@ public sealed class TcpPlcClient : IPlcConnection
     /// </summary>
     public event EventHandler<UnknownTelegramEventArgs>? UnknownTelegramReceived;
 
+    /// <summary>Fired immediately after raw bytes are written to the network.</summary>
+    public event EventHandler<RawBytesEventArgs>? RawBytesSent;
+
+    /// <summary>Fired immediately after raw bytes are read from the network.</summary>
+    public event EventHandler<RawBytesEventArgs>? RawBytesReceived;
+
     public bool IsConnected => _isConnected;
 
     public TcpPlcClient(
@@ -104,6 +110,7 @@ public sealed class TcpPlcClient : IPlcConnection
         {
             await _stream!.WriteAsync(framed, ct);
             await _stream!.FlushAsync(ct);
+            RawBytesSent?.Invoke(this, new RawBytesEventArgs(framed));
         }
         finally
         {
@@ -196,6 +203,10 @@ public sealed class TcpPlcClient : IPlcConnection
                 _logger?.LogInformation("Remote endpoint closed the connection.");
                 break;
             }
+
+            var received = new byte[bytesRead];
+            Array.Copy(buffer, received, bytesRead);
+            RawBytesReceived?.Invoke(this, new RawBytesEventArgs(received));
 
             accumulated.Write(buffer, 0, bytesRead);
             ProcessBuffer(accumulated);
