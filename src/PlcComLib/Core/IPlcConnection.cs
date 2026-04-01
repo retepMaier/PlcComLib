@@ -48,28 +48,45 @@ public interface IPlcConnection : IAsyncDisposable
 /// <summary>Event args carrying raw bytes from the wire, used for diagnostic events.</summary>
 public sealed class RawBytesEventArgs : EventArgs
 {
-    public RawBytesEventArgs(byte[] data)
+    public RawBytesEventArgs(byte[] data, string remoteAddress = "", int port = 0)
     {
         ArgumentNullException.ThrowIfNull(data);
-        Data = data;
+        Data          = data;
+        RemoteAddress = remoteAddress;
+        Port          = port;
     }
 
     /// <summary>The raw bytes transferred over the network.</summary>
     public byte[] Data { get; }
+
+    /// <summary>The IP address of the remote endpoint (destination for sent bytes, source for received bytes).</summary>
+    public string RemoteAddress { get; }
+
+    /// <summary>The port of the remote endpoint (destination for sent bytes, source for received bytes).</summary>
+    public int Port { get; }
 }
 
 /// <summary>Event args for a received telegram.</summary>
 public sealed class TelegramReceivedEventArgs : EventArgs
 {
-    public TelegramReceivedEventArgs(Telegram telegram, byte[]? rawPayload = null)
+    public TelegramReceivedEventArgs(Telegram telegram, byte[]? rawPayload = null, string remoteAddress = "", int port = 0)
     {
-        Telegram   = telegram;
-        RawPayload = rawPayload ?? [];
+        Telegram      = telegram;
+        RawPayload    = rawPayload ?? [];
+        RemoteAddress = remoteAddress;
+        Port          = port;
     }
 
-    public Telegram Telegram   { get; }
+    public Telegram Telegram { get; }
+
     /// <summary>The raw wire bytes that produced this telegram (includes the MessageId header for typed telegrams).</summary>
-    public byte[]   RawPayload { get; }
+    public byte[] RawPayload { get; }
+
+    /// <summary>The IP address of the remote endpoint that sent this telegram.</summary>
+    public string RemoteAddress { get; }
+
+    /// <summary>The port of the remote endpoint that sent this telegram.</summary>
+    public int Port { get; }
 }
 
 /// <summary>Event args for a connection state change.</summary>

@@ -169,13 +169,13 @@ public class TypedTelegramTests
         act.Should().Throw<ArgumentException>().WithMessage("*Buffer too short*");
     }
 
-    // ── 5. WireSize includes 2-byte MessageId header ──────────────────────────
+    // ── 5. WireSize includes 2-byte MessageId header and 2-byte MessageLength ──
 
     [Fact]
     public void WireSize_IncludesMessageIdHeader()
     {
-        // 2 (header) + 2 (Word) + 4 (Real) + 12 (S7String maxLen=10) = 20
-        const int expected = 2 + 2 + 4 + (2 + 10);
+        // 2 (MessageId) + 2 (MessageLength) + 2 (Word) + 4 (Real) + 12 (S7String maxLen=10) = 22
+        const int expected = 2 + 2 + 2 + 4 + (2 + 10);
         TestStatusTelegram.WireSize.Should().Be(expected);
     }
 
@@ -220,9 +220,10 @@ public class TypedTelegramTests
         // byte order is passed at serialize time (as the connection would pass it)
         var bytes = t.Serialize(ByteOrder.LittleEndian);
 
-        // bytes[0..1] = MessageId (little-endian, follows connection byte order)
-        // bytes[2..3] = DeviceId (little-endian)
-        ushort leWord = BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan(2));
+        // bytes[0..1] = MessageId (little-endian)
+        // bytes[2..3] = MessageLength (little-endian)
+        // bytes[4..5] = DeviceId (little-endian)
+        ushort leWord = BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan(4));
         leWord.Should().Be(0x1234);
     }
 
@@ -273,7 +274,8 @@ public class TypedTelegramTests
         var t = new LittleEndianTelegram { DeviceId = 0x1234 };
         var bytes = t.Serialize(); // default = BigEndian
 
-        ushort beWord = BinaryPrimitives.ReadUInt16BigEndian(bytes.AsSpan(2));
+        // bytes[4..5] = DeviceId (after MessageId at 0-1 and MessageLength at 2-3)
+        ushort beWord = BinaryPrimitives.ReadUInt16BigEndian(bytes.AsSpan(4));
         beWord.Should().Be(0x1234);
     }
 
@@ -325,8 +327,8 @@ public class TypedTelegramTests
         // 'TotalLength' is the user-chosen name decorated with [MsgLength].
         var t = new TestStatusTelegram();
         t.TotalLength.Should().Be(TestStatusTelegram.WireSize);
-        // 2 (header) + 2 (Word) + 4 (Real) + 12 (S7String maxLen=10)
-        t.TotalLength.Should().Be(20);
+        // 2 (MessageId) + 2 (MessageLength) + 2 (Word) + 4 (Real) + 12 (S7String maxLen=10)
+        t.TotalLength.Should().Be(22);
     }
 
     [Fact]
@@ -341,12 +343,13 @@ public class TypedTelegramTests
     [Fact]
     public void CharArray_WireSize_IsExactLength()
     {
-        // 2 (MessageId header) + 2 (DeviceId Word) + 8 (Tag CharArray) + 4 (Code CharArray)
-        const int header   = 2;
-        const int deviceId = 2;
-        const int tag      = 8;
-        const int code     = 4;
-        CharArrayTelegram.WireSize.Should().Be(header + deviceId + tag + code);
+        // 2 (MessageId) + 2 (MessageLength) + 2 (DeviceId Word) + 8 (Tag CharArray) + 4 (Code CharArray)
+        const int msgId     = 2;
+        const int msgLength = 2;
+        const int deviceId  = 2;
+        const int tag       = 8;
+        const int code      = 4;
+        CharArrayTelegram.WireSize.Should().Be(msgId + msgLength + deviceId + tag + code);
     }
 
     [Fact]
@@ -360,19 +363,19 @@ public class TypedTelegramTests
         };
         var bytes = t.Serialize();
 
-        // Tag starts at offset 4 (2 header + 2 Word)
-        bytes[4].Should().Be((byte)'H');
-        bytes[5].Should().Be((byte)'e');
-        bytes[6].Should().Be((byte)'l');
-        bytes[7].Should().Be((byte)'l');
-        bytes[8].Should().Be((byte)'o');
-        bytes[9].Should().Be((byte)'!');
+        // Tag starts at offset 6 (2 MessageId + 2 MessageLength + 2 DeviceId)
+        bytes[6].Should().Be((byte)'H');
+        bytes[7].Should().Be((byte)'e');
+        bytes[8].Should().Be((byte)'l');
+        bytes[9].Should().Be((byte)'l');
+        bytes[10].Should().Be((byte)'o');
+        bytes[11].Should().Be((byte)'!');
 
-        // Code starts at offset 12 (4 + 8)
-        bytes[12].Should().Be((byte)'A');
-        bytes[13].Should().Be((byte)'B');
-        bytes[14].Should().Be((byte)'C');
-        bytes[15].Should().Be((byte)'D');
+        // Code starts at offset 14 (6 + 8)
+        bytes[14].Should().Be((byte)'A');
+        bytes[15].Should().Be((byte)'B');
+        bytes[16].Should().Be((byte)'C');
+        bytes[17].Should().Be((byte)'D');
     }
 
     [Fact]
@@ -403,16 +406,16 @@ public class TypedTelegramTests
         };
         var bytes = t.Serialize();
 
-        // Tag: 'A','B','C' then 5 zero bytes
-        bytes[4].Should().Be((byte)'A');
-        bytes[5].Should().Be((byte)'B');
-        bytes[6].Should().Be((byte)'C');
-        bytes[7].Should().Be(0);
-        bytes[11].Should().Be(0);
-
-        // Code: 'Z' then 3 zero bytes
-        bytes[12].Should().Be((byte)'Z');
+        // Tag: 'A','B','C' then 5 zero bytes (starts at offset 6)
+        bytes[6].Should().Be((byte)'A');
+        bytes[7].Should().Be((byte)'B');
+        bytes[8].Should().Be((byte)'C');
+        bytes[9].Should().Be(0);
         bytes[13].Should().Be(0);
+
+        // Code: 'Z' then 3 zero bytes (starts at offset 14)
+        bytes[14].Should().Be((byte)'Z');
+        bytes[15].Should().Be(0);
     }
 
     [Fact]
@@ -421,7 +424,8 @@ public class TypedTelegramTests
         var t = new CharArrayTelegram { Tag = null, Code = null };
         var bytes = t.Serialize();
 
-        for (int i = 4; i < 4 + 8 + 4; i++)
+        // Data fields start at offset 6 (2 MessageId + 2 MessageLength + 2 DeviceId)
+        for (int i = 6; i < 6 + 8 + 4; i++)
             bytes[i].Should().Be(0, because: $"byte[{i}] should be zero for null char[]");
     }
 
@@ -459,10 +463,10 @@ public class TypedTelegramTests
     public void FlexibleType_MsgLength_DeclaresAsUshort_ReturnsWireSize()
     {
         // MyLength is declared as 'ushort' (not int) but [MsgLength] is applied.
-        // WireSize = 2 (header) + 2 (SensorId Word) + 4 (Reading DInt) = 8
+        // WireSize = 2 (MessageId) + 2 (MessageLength) + 2 (SensorId Word) + 4 (Reading DInt) = 10
         var t = new FlexibleTypeTelegram();
         t.MyLength.Should().Be((ushort)FlexibleTypeTelegram.WireSize);
-        t.MyLength.Should().Be(8);
+        t.MyLength.Should().Be(10);
         ((ITelegram)t).Length.Should().Be(FlexibleTypeTelegram.WireSize);
     }
 

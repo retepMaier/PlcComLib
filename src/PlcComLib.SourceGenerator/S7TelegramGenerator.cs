@@ -223,7 +223,9 @@ public sealed class S7TelegramGenerator : IIncrementalGenerator
 
     private static string GenerateCode(TelegramClassInfo info)
     {
-        int totalWireSize = 2; // MessageId header (always big-endian, 2 bytes)
+        bool hasMsgLength = info.MsgLengthPropName is not null;
+        int totalWireSize = 2; // MessageId header (always 2 bytes)
+        if (hasMsgLength) totalWireSize += 2; // MessageLength field (UInt16, 2 bytes)
         foreach (var f in info.Fields) totalWireSize += f.WireSize;
 
         var sb = new StringBuilder(1024);
@@ -282,6 +284,8 @@ public sealed class S7TelegramGenerator : IIncrementalGenerator
         sb.AppendLine("            Fields =");
         sb.AppendLine("            [");
         sb.AppendLine("                new global::PlcComLib.Telegrams.TelegramField { Name = \"__MessageId\", DataType = global::PlcComLib.DataTypes.S7DataType.Word },");
+        if (hasMsgLength)
+            sb.AppendLine("                new global::PlcComLib.Telegrams.TelegramField { Name = \"__MessageLength\", DataType = global::PlcComLib.DataTypes.S7DataType.Word },");
         foreach (var f in info.Fields)
         {
             sb.Append($"                new global::PlcComLib.Telegrams.TelegramField {{ Name = \"{f.Name}\", DataType = {f.DataTypeExpr}");
@@ -303,7 +307,9 @@ public sealed class S7TelegramGenerator : IIncrementalGenerator
         sb.AppendLine($"        var __buf = new byte[WireSize];");
         // TelegramId follows the connection byte order
         sb.AppendLine("        if (__le) global::System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(__buf.AsSpan(0), MessageId); else global::System.Buffers.Binary.BinaryPrimitives.WriteUInt16BigEndian(__buf.AsSpan(0), MessageId);");
-        int offset = 2;
+        if (hasMsgLength)
+            sb.AppendLine("        if (__le) global::System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(__buf.AsSpan(2), (ushort)WireSize); else global::System.Buffers.Binary.BinaryPrimitives.WriteUInt16BigEndian(__buf.AsSpan(2), (ushort)WireSize);");
+        int offset = hasMsgLength ? 4 : 2;
         foreach (var f in info.Fields)
         {
             EmitSerialize(sb, f, offset);
@@ -323,8 +329,14 @@ public sealed class S7TelegramGenerator : IIncrementalGenerator
         sb.AppendLine("        ushort __id = __le ? global::System.Buffers.Binary.BinaryPrimitives.ReadUInt16LittleEndian(data) : global::System.Buffers.Binary.BinaryPrimitives.ReadUInt16BigEndian(data);");
         sb.AppendLine("        if (__id != MessageId)");
         sb.AppendLine($"            throw new global::System.ArgumentException($\"MessageId mismatch: expected 0x{info.MessageId:X4}, got 0x{{__id:X4}}.\");");
+        if (hasMsgLength)
+        {
+            sb.AppendLine("        ushort __len = __le ? global::System.Buffers.Binary.BinaryPrimitives.ReadUInt16LittleEndian(data.Slice(2, 2)) : global::System.Buffers.Binary.BinaryPrimitives.ReadUInt16BigEndian(data.Slice(2, 2));");
+            sb.AppendLine("        if (__len != WireSize)");
+            sb.AppendLine($"            throw new global::System.ArgumentException($\"MessageLength mismatch: expected {{WireSize}}, got {{__len}}.\");");
+        }
         sb.AppendLine($"        var __r = new {info.ClassName}();");
-        offset = 2;
+        offset = hasMsgLength ? 4 : 2;
         foreach (var f in info.Fields)
         {
             EmitDeserialize(sb, f, offset);

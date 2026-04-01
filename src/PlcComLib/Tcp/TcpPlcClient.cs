@@ -110,7 +110,7 @@ public sealed class TcpPlcClient : IPlcConnection
         {
             await _stream!.WriteAsync(framed, ct);
             await _stream!.FlushAsync(ct);
-            RawBytesSent?.Invoke(this, new RawBytesEventArgs(framed));
+            RawBytesSent?.Invoke(this, new RawBytesEventArgs(framed, _config.Host, _config.Port));
         }
         finally
         {
@@ -134,6 +134,28 @@ public sealed class TcpPlcClient : IPlcConnection
             if (e.RawPayload.Length < 2) return;
             if (ReadTelegramId(e.RawPayload) != T.MessageId) return;
             try   { handler(T.Deserialize(e.RawPayload, _byteOrder)); }
+            catch (Exception ex) { _logger?.LogWarning(ex, "Typed handler for {T} threw.", typeof(T).Name); }
+        };
+
+        TelegramReceived += listener;
+        return new Subscription(() => TelegramReceived -= listener);
+    }
+
+    /// <summary>
+    /// Subscribes to <see cref="TelegramReceived"/> and invokes <paramref name="handler"/>
+    /// whenever a payload whose MessageId matches <typeparamref name="T"/>.<c>MessageId</c> arrives.
+    /// The handler receives the deserialised telegram plus the remote IP address and port.
+    /// Uses static abstract interface members — zero reflection.
+    /// </summary>
+    /// <returns>An <see cref="IDisposable"/> that unsubscribes when disposed.</returns>
+    public IDisposable Subscribe<T>(Action<T, string, int> handler)
+        where T : ITypedS7Telegram<T>
+    {
+        EventHandler<TelegramReceivedEventArgs> listener = (_, e) =>
+        {
+            if (e.RawPayload.Length < 2) return;
+            if (ReadTelegramId(e.RawPayload) != T.MessageId) return;
+            try   { handler(T.Deserialize(e.RawPayload, _byteOrder), e.RemoteAddress, e.Port); }
             catch (Exception ex) { _logger?.LogWarning(ex, "Typed handler for {T} threw.", typeof(T).Name); }
         };
 
@@ -206,7 +228,7 @@ public sealed class TcpPlcClient : IPlcConnection
 
             var received = new byte[bytesRead];
             Array.Copy(buffer, received, bytesRead);
-            RawBytesReceived?.Invoke(this, new RawBytesEventArgs(received));
+            RawBytesReceived?.Invoke(this, new RawBytesEventArgs(received, _config.Host, _config.Port));
 
             accumulated.Write(buffer, 0, bytesRead);
             ProcessBuffer(accumulated);
@@ -224,13 +246,13 @@ public sealed class TcpPlcClient : IPlcConnection
             accumulated.SetLength(0);
             if (remaining > 0) accumulated.Write(data, consumed, remaining);
 
-            DispatchTelegram(message.ToArray());
+            DispatchTelegram(message.ToArray(), _config.Host, _config.Port);
         }
     }
 
     // ── Dispatch ──────────────────────────────────────────────────────────────
 
-    private void DispatchTelegram(byte[] payload)
+    private void DispatchTelegram(byte[] payload, string remoteAddress, int port)
     {
         // 1. MessageId-based dispatch (typed telegrams with MessageId > 0)
         if (payload.Length >= 2)
@@ -240,7 +262,7 @@ public sealed class TcpPlcClient : IPlcConnection
             {
                 if (def.MessageId != 0 && def.MessageId == msgId)
                 {
-                    TryDeserializeAndFire(def, payload);
+                    TryDeserializeAndFire(def, payload, remoteAddress, port);
                     return;
                 }
             }
@@ -251,7 +273,7 @@ public sealed class TcpPlcClient : IPlcConnection
         {
             if (def.MessageId == 0 && def.TotalWireSize == payload.Length)
             {
-                TryDeserializeAndFire(def, payload);
+                TryDeserializeAndFire(def, payload, remoteAddress, port);
                 return;
             }
         }
@@ -264,12 +286,12 @@ public sealed class TcpPlcClient : IPlcConnection
         UnknownTelegramReceived?.Invoke(this, new UnknownTelegramEventArgs(payload, _byteOrder));
     }
 
-    private void TryDeserializeAndFire(TelegramDefinition def, byte[] payload)
+    private void TryDeserializeAndFire(TelegramDefinition def, byte[] payload, string remoteAddress, int port)
     {
         try
         {
             var telegram = TelegramSerializer.Deserialize(def, payload, _byteOrder);
-            TelegramReceived?.Invoke(this, new TelegramReceivedEventArgs(telegram, payload));
+            TelegramReceived?.Invoke(this, new TelegramReceivedEventArgs(telegram, payload, remoteAddress, port));
         }
         catch (Exception ex)
         {
