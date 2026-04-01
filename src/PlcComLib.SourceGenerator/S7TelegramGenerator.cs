@@ -186,9 +186,11 @@ public sealed class S7TelegramGenerator : IIncrementalGenerator
 
     private static string GenerateCode(TelegramClassInfo info)
     {
-        // Wire size: 2 bytes for TelegramId header + sum of all data fields.
-        // No embedded length field — framing is done by TelegramIdFramer using the registered wire size.
-        int totalWireSize = 2; // TelegramId header
+        // Wire size: sum of all user-declared data fields.
+        // No header bytes are added — the user defines the complete wire format.
+        // Framing is done by TelegramIdFramer using the registered wire size and
+        // the MessageId byte offset configured via .WithMessageId() on the builder.
+        int totalWireSize = 0;
         foreach (var f in info.Fields) totalWireSize += f.WireSize;
 
         var sb = new StringBuilder(1024);
@@ -207,7 +209,7 @@ public sealed class S7TelegramGenerator : IIncrementalGenerator
 
         // ── static convenience members ────────────────────────────────────────
         // WireSize is the compile-time total; MessageId is the runtime value from Definition.
-        sb.AppendLine($"    /// <summary>Total wire size in bytes (2-byte TelegramId header + data fields).</summary>");
+        sb.AppendLine($"    /// <summary>Total wire size in bytes (sum of all declared data fields).</summary>");
         sb.AppendLine($"    public static int WireSize => {totalWireSize};");
         sb.AppendLine();
 
@@ -227,7 +229,6 @@ public sealed class S7TelegramGenerator : IIncrementalGenerator
         sb.AppendLine($"            ConfiguredWireSize = {totalWireSize},");
         sb.AppendLine("            Fields =");
         sb.AppendLine("            [");
-        sb.AppendLine("                new global::PlcComLib.Telegrams.TelegramField { Name = \"__TelegramId\", DataType = global::PlcComLib.DataTypes.S7DataType.Word },");
         foreach (var f in info.Fields)
         {
             sb.Append($"                new global::PlcComLib.Telegrams.TelegramField {{ Name = \"{f.Name}\", DataType = {f.DataTypeExpr}");
@@ -242,14 +243,12 @@ public sealed class S7TelegramGenerator : IIncrementalGenerator
         sb.AppendLine();
 
         // ── Serialize ─────────────────────────────────────────────────────────
-        // Wire format: [TelegramId: 2 bytes][data fields…]
-        // The TelegramId value comes from Definition.MessageId (set at registration time by the builder).
+        // Wire format: [data fields…] — exactly what the user declared, nothing prepended.
         sb.AppendLine("    public byte[] Serialize(global::PlcComLib.DataTypes.ByteOrder byteOrder = global::PlcComLib.DataTypes.ByteOrder.BigEndian)");
         sb.AppendLine("    {");
         sb.AppendLine("        bool __le = byteOrder == global::PlcComLib.DataTypes.ByteOrder.LittleEndian;");
         sb.AppendLine($"        var __buf = new byte[WireSize];");
-        sb.AppendLine("        if (__le) global::System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(__buf.AsSpan(0), (ushort)_s7Definition.MessageId); else global::System.Buffers.Binary.BinaryPrimitives.WriteUInt16BigEndian(__buf.AsSpan(0), (ushort)_s7Definition.MessageId);");
-        int offset = 2; // data fields start after the 2-byte TelegramId
+        int offset = 0;
         foreach (var f in info.Fields)
         {
             EmitSerialize(sb, f, offset);
@@ -266,11 +265,8 @@ public sealed class S7TelegramGenerator : IIncrementalGenerator
         sb.AppendLine("        bool __le = byteOrder == global::PlcComLib.DataTypes.ByteOrder.LittleEndian;");
         sb.AppendLine("        if (data.Length < WireSize)");
         sb.AppendLine($"            throw new global::System.ArgumentException($\"Buffer too short: expected {{WireSize}} bytes, got {{data.Length}}.\");");
-        sb.AppendLine("        ushort __id = __le ? global::System.Buffers.Binary.BinaryPrimitives.ReadUInt16LittleEndian(data) : global::System.Buffers.Binary.BinaryPrimitives.ReadUInt16BigEndian(data);");
-        sb.AppendLine("        if (_s7Definition.MessageId != 0 && __id != _s7Definition.MessageId)");
-        sb.AppendLine($"            throw new global::System.ArgumentException($\"TelegramId mismatch: expected 0x{{_s7Definition.MessageId:X4}}, got 0x{{__id:X4}}.\");");
         sb.AppendLine($"        var __r = new {info.ClassName}();");
-        offset = 2; // data fields start after the 2-byte TelegramId
+        offset = 0;
         foreach (var f in info.Fields)
         {
             EmitDeserialize(sb, f, offset);

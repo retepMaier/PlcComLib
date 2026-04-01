@@ -66,10 +66,19 @@ public sealed class TelegramIdFramer : IMessageFramer
     /// Reads the TelegramId from the configured byte offset and data type, looks up the
     /// expected total wire size, and waits until that many bytes are available.
     /// </summary>
+    /// <remarks>
+    /// On a <c>false</c> return, <paramref name="consumed"/> is set to <c>1</c> when the buffer
+    /// contained enough bytes to check at least one registered ID but none matched — the caller
+    /// should discard those bytes and retry. <paramref name="consumed"/> remains <c>0</c> when
+    /// there were insufficient bytes to evaluate any registered ID (wait for more data), or when
+    /// an ID matched but the full frame has not yet arrived (wait for more data).
+    /// </remarks>
     public bool TryExtract(ReadOnlySpan<byte> buffer, out ReadOnlySpan<byte> message, out int consumed)
     {
         message  = default;
         consumed = 0;
+
+        bool anyIdChecked = false;
 
         // Try each registered definition: find the first whose ID matches at its configured offset.
         foreach (var (msgId, entry) in _entryByMessageId)
@@ -78,6 +87,7 @@ public sealed class TelegramIdFramer : IMessageFramer
             int minBytes = entry.IdByteOffset + idSize;
             if (buffer.Length < minBytes) continue;
 
+            anyIdChecked = true;
             long telegramId = ReadId(buffer, entry.IdByteOffset, entry.IdDataType);
             if (telegramId != msgId) continue;
 
@@ -89,6 +99,9 @@ public sealed class TelegramIdFramer : IMessageFramer
             return true;
         }
 
+        // If at least one ID was read but nothing matched, signal that 1 byte should be
+        // discarded so the caller can scan forward and avoid an unbounded buffer.
+        if (anyIdChecked) consumed = 1;
         return false;
     }
 

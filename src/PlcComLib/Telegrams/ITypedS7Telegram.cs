@@ -20,20 +20,20 @@ public interface ITypedS7Telegram<TSelf> : ITelegram where TSelf : ITypedS7Teleg
 
     /// <summary>
     /// Deserialises a telegram from a raw wire payload.
-    /// Validates TelegramId (when non-zero) and buffer length.
+    /// Validates buffer length against <c>WireSize</c>.
     /// </summary>
-    /// <param name="data">Raw wire bytes (including the 2-byte TelegramId header).</param>
+    /// <param name="data">Raw wire bytes (exactly the user-declared data fields).</param>
     /// <param name="byteOrder">
-    /// Byte order for multi-byte data fields and the TelegramId header. Supplied by the client/server connection.
+    /// Byte order for multi-byte data fields. Supplied by the client/server connection.
     /// </param>
     static abstract TSelf Deserialize(ReadOnlySpan<byte> data,
         ByteOrder byteOrder = ByteOrder.BigEndian);
 
     /// <summary>
-    /// Serialises this telegram to its wire payload.
+    /// Serialises this telegram to its wire payload (exactly the user-declared data fields).
     /// </summary>
     /// <param name="byteOrder">
-    /// Byte order for multi-byte data fields and the TelegramId header. Supplied by the client/server connection.
+    /// Byte order for multi-byte data fields. Supplied by the client/server connection.
     /// </param>
     byte[] Serialize(ByteOrder byteOrder = ByteOrder.BigEndian);
 }

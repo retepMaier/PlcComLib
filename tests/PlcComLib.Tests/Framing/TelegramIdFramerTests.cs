@@ -9,12 +9,11 @@ namespace PlcComLib.Tests.Framing;
 
 public class TelegramIdFramerTests
 {
-    // Build a framer with two known telegrams.
-    // Definitions include the header sentinel fields as the source generator emits them:
-    //   __MessageId   (Word = 2 bytes)
-    //   __MessageLength (Word = 2 bytes)
-    //   ... data fields
-    // TotalWireSize = Fields.Sum(f => f.WireSize)
+    // Build a framer with two hand-crafted telegram definitions.
+    // Each definition manually includes a __TelegramId sentinel field so that
+    // TotalWireSize (= Fields.Sum) covers the full frame size.
+    // Source-generated definitions omit __TelegramId from the Fields list and
+    // rely on ConfiguredWireSize instead.
 
     // T1: 2 + 2 + 8 = 12 bytes   (one LWord data field)
     // T2: 2 + 2 + 2 = 6 bytes    (one Word data field)
@@ -80,23 +79,55 @@ public class TelegramIdFramerTests
     {
         var framer = BuildFramer();
         var buffer = MakeFrame(0x0099, 10);
-        framer.TryExtract(buffer, out _, out _).Should().BeFalse();
+        framer.TryExtract(buffer, out _, out int consumed).Should().BeFalse();
+        // Buffer had enough bytes to check IDs — caller must discard 1 byte and scan forward.
+        consumed.Should().Be(1);
     }
 
     [Fact]
     public void TryExtract_ReturnsFalse_WhenBufferTooShortForId()
     {
         var framer = BuildFramer();
-        framer.TryExtract(new byte[] { 0x00 }, out _, out _).Should().BeFalse();
+        framer.TryExtract(new byte[] { 0x00 }, out _, out int consumed).Should().BeFalse();
+        // Insufficient bytes to evaluate any ID — caller should wait for more data.
+        consumed.Should().Be(0);
     }
 
     [Fact]
     public void TryExtract_ReturnsFalse_WhenPayloadIncomplete()
     {
         var framer = BuildFramer();
-        // T1 needs 12 bytes, only provide 6
+        // T1 needs 12 bytes; only 6 provided — ID matched but frame is incomplete.
         var buffer = MakeFrame(0x0001, 6);
-        framer.TryExtract(buffer, out _, out _).Should().BeFalse();
+        framer.TryExtract(buffer, out _, out int consumed).Should().BeFalse();
+        // Caller must wait for more bytes (not discard).
+        consumed.Should().Be(0);
+    }
+
+    [Fact]
+    public void TryExtract_UnknownId_ConsumedAllowsBufferToAdvance()
+    {
+        // Simulate a receive buffer that starts with unrecognised bytes followed by a valid frame.
+        // The caller (ProcessBuffer) should discard consumed bytes on each false return, eventually
+        // reaching the valid frame.
+        var framer = BuildFramer();
+
+        var garbage = new byte[] { 0xFF, 0xFF }; // 2 bytes with unknown ID 0xFFFF
+        var validFrame = MakeFrame(0x0001, T1.TotalWireSize); // 12 bytes, ID 0x0001
+        var combined = garbage.Concat(validFrame).ToArray();
+
+        // First call: unknown ID at head → consumed = 1, caller advances 1 byte.
+        framer.TryExtract(combined, out _, out int c1).Should().BeFalse();
+        c1.Should().Be(1);
+
+        // Second call (after advancing 1 byte): still no match (0xFF .. 0x00 0x01 …)
+        framer.TryExtract(combined.AsSpan(c1), out _, out int c2).Should().BeFalse();
+        c2.Should().Be(1);
+
+        // Third call (after advancing 2 bytes): now at the valid frame.
+        framer.TryExtract(combined.AsSpan(c1 + c2), out var msg, out int c3).Should().BeTrue();
+        c3.Should().Be(T1.TotalWireSize);
+        msg.ToArray().Should().Equal(validFrame);
     }
 
     [Fact]
@@ -142,8 +173,9 @@ public class TelegramIdFramerTests
         };
         var framer = new TelegramIdFramer(definitions);
         var buffer = new byte[] { 0x00, 0x00, 0xAA };
-        // MessageId=0 definitions are ignored; 0x0000 has no entry → false
-        framer.TryExtract(buffer, out _, out _).Should().BeFalse();
+        // MessageId=0 definitions are ignored; registry is empty → no IDs checked → consumed = 0
+        framer.TryExtract(buffer, out _, out int consumed).Should().BeFalse();
+        consumed.Should().Be(0);
     }
 }
 
