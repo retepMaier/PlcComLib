@@ -9,12 +9,11 @@ namespace PlcComLib.Tests.Framing;
 
 public class TelegramIdFramerTests
 {
-    // Build a framer with two known telegrams.
-    // Definitions include the header sentinel fields as the source generator emits them:
-    //   __MessageId   (Word = 2 bytes)
-    //   __MessageLength (Word = 2 bytes)
-    //   ... data fields
-    // TotalWireSize = Fields.Sum(f => f.WireSize)
+    // Build a framer with two hand-crafted telegram definitions.
+    // Each definition manually includes a __TelegramId sentinel field so that
+    // TotalWireSize (= Fields.Sum) covers the full frame size.
+    // Source-generated definitions omit __TelegramId from the Fields list and
+    // rely on ConfiguredWireSize instead.
 
     // T1: 2 + 2 + 8 = 12 bytes   (one LWord data field)
     // T2: 2 + 2 + 2 = 6 bytes    (one Word data field)

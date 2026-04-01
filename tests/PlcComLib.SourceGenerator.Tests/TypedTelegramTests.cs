@@ -195,10 +195,10 @@ public class TypedTelegramTests
     // ── 6. Definition structure ───────────────────────────────────────────────
 
     [Fact]
-    public void Definition_FirstField_IsTelegramId()
+    public void Definition_FirstField_IsFirstDataField()
     {
         var def = TestStatusTelegram.Definition;
-        def.Fields[0].Name.Should().Be("__TelegramId");
+        def.Fields[0].Name.Should().Be("MachineId");
         def.Fields[0].DataType.Should().Be(S7DataType.Word);
     }
 

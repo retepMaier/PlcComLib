@@ -227,7 +227,6 @@ public sealed class S7TelegramGenerator : IIncrementalGenerator
         sb.AppendLine($"            ConfiguredWireSize = {totalWireSize},");
         sb.AppendLine("            Fields =");
         sb.AppendLine("            [");
-        sb.AppendLine("                new global::PlcComLib.Telegrams.TelegramField { Name = \"__TelegramId\", DataType = global::PlcComLib.DataTypes.S7DataType.Word },");
         foreach (var f in info.Fields)
         {
             sb.Append($"                new global::PlcComLib.Telegrams.TelegramField {{ Name = \"{f.Name}\", DataType = {f.DataTypeExpr}");
