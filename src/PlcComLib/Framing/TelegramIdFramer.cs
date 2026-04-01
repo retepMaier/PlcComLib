@@ -28,7 +28,7 @@ public sealed class TelegramIdFramer : IMessageFramer
     private readonly ByteOrder _byteOrder;
 
     // MessageId → (EffectiveWireSize, MessageIdByteOffset, MessageIdDataType)
-    private readonly IReadOnlyDictionary<ushort, FrameEntry> _entryByMessageId;
+    private readonly IReadOnlyDictionary<long, FrameEntry> _entryByMessageId;
 
     private readonly record struct FrameEntry(int WireSize, int IdByteOffset, S7DataType IdDataType);
 
@@ -45,7 +45,7 @@ public sealed class TelegramIdFramer : IMessageFramer
         ArgumentNullException.ThrowIfNull(definitions);
         _byteOrder = byteOrder;
 
-        var dict = new Dictionary<ushort, FrameEntry>();
+        var dict = new Dictionary<long, FrameEntry>();
         foreach (var def in definitions)
         {
             if (def.MessageId != 0)
@@ -78,7 +78,7 @@ public sealed class TelegramIdFramer : IMessageFramer
             int minBytes = entry.IdByteOffset + idSize;
             if (buffer.Length < minBytes) continue;
 
-            ushort telegramId = ReadId(buffer, entry.IdByteOffset, entry.IdDataType);
+            long telegramId = ReadId(buffer, entry.IdByteOffset, entry.IdDataType);
             if (telegramId != msgId) continue;
 
             // ID matched — wait for the full frame.
@@ -94,34 +94,44 @@ public sealed class TelegramIdFramer : IMessageFramer
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    private ushort ReadId(ReadOnlySpan<byte> buffer, int offset, S7DataType dataType)
+    /// <summary>
+    /// Reads a numeric id value from <paramref name="buffer"/> at the given
+    /// <paramref name="offset"/> using the specified <paramref name="dataType"/> and byte order.
+    /// Used by the framer and by dispatch layers to identify an incoming telegram.
+    /// </summary>
+    public static long ReadId(ReadOnlySpan<byte> buffer, int offset, S7DataType dataType,
+        ByteOrder byteOrder = ByteOrder.BigEndian)
     {
-        bool le = _byteOrder == ByteOrder.LittleEndian;
+        bool le = byteOrder == ByteOrder.LittleEndian;
         return dataType switch
         {
             S7DataType.Byte  => buffer[offset],
-            S7DataType.SInt  => (ushort)(sbyte)buffer[offset],
-            S7DataType.Int   => (ushort)(le
+            S7DataType.SInt  => (sbyte)buffer[offset],
+            S7DataType.Int   => le
                 ? BinaryPrimitives.ReadInt16LittleEndian(buffer.Slice(offset, 2))
-                : BinaryPrimitives.ReadInt16BigEndian(buffer.Slice(offset, 2))),
-            S7DataType.DWord => (ushort)(le
+                : BinaryPrimitives.ReadInt16BigEndian(buffer.Slice(offset, 2)),
+            S7DataType.DWord => (long)(le
                 ? BinaryPrimitives.ReadUInt32LittleEndian(buffer.Slice(offset, 4))
                 : BinaryPrimitives.ReadUInt32BigEndian(buffer.Slice(offset, 4))),
-            S7DataType.DInt  => (ushort)(le
+            S7DataType.DInt  => le
                 ? BinaryPrimitives.ReadInt32LittleEndian(buffer.Slice(offset, 4))
-                : BinaryPrimitives.ReadInt32BigEndian(buffer.Slice(offset, 4))),
-            S7DataType.LWord => (ushort)(le
+                : BinaryPrimitives.ReadInt32BigEndian(buffer.Slice(offset, 4)),
+            S7DataType.LWord => (long)(le
                 ? BinaryPrimitives.ReadUInt64LittleEndian(buffer.Slice(offset, 8))
                 : BinaryPrimitives.ReadUInt64BigEndian(buffer.Slice(offset, 8))),
-            S7DataType.LInt  => (ushort)(le
+            S7DataType.LInt  => le
                 ? BinaryPrimitives.ReadInt64LittleEndian(buffer.Slice(offset, 8))
-                : BinaryPrimitives.ReadInt64BigEndian(buffer.Slice(offset, 8))),
+                : BinaryPrimitives.ReadInt64BigEndian(buffer.Slice(offset, 8)),
             // Default: Word (UInt16)
             _                => le
                 ? BinaryPrimitives.ReadUInt16LittleEndian(buffer.Slice(offset, 2))
                 : BinaryPrimitives.ReadUInt16BigEndian(buffer.Slice(offset, 2)),
         };
     }
+
+    // Private instance wrapper forwarding to the static method for use by TryExtract.
+    private long ReadId(ReadOnlySpan<byte> buffer, int offset, S7DataType dataType)
+        => ReadId(buffer, offset, dataType, _byteOrder);
 
     /// <summary>
     /// Reads an integer length value from <paramref name="buffer"/> at the given

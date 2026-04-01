@@ -1,4 +1,3 @@
-using System.Buffers.Binary;
 using System.Net;
 using System.Net.Sockets;
 using Microsoft.Extensions.Logging;
@@ -144,8 +143,8 @@ public sealed class UdpPlcServer : IPlcConnection
     {
         EventHandler<TelegramReceivedEventArgs> listener = (_, e) =>
         {
-            if (e.RawPayload.Length < 2) return;
-            if (ReadTelegramId(e.RawPayload) != T.Definition.MessageId) return;
+            var def = T.Definition;
+            if (!MatchesMessageId(e.RawPayload, def)) return;
             try   { handler(T.Deserialize(e.RawPayload, _byteOrder)); }
             catch (Exception ex) { _logger?.LogWarning(ex, "Typed handler for {T} threw.", typeof(T).Name); }
         };
@@ -164,8 +163,8 @@ public sealed class UdpPlcServer : IPlcConnection
     {
         EventHandler<TelegramReceivedEventArgs> listener = (_, e) =>
         {
-            if (e.RawPayload.Length < 2) return;
-            if (ReadTelegramId(e.RawPayload) != T.Definition.MessageId) return;
+            var def = T.Definition;
+            if (!MatchesMessageId(e.RawPayload, def)) return;
             try   { handler(T.Deserialize(e.RawPayload, _byteOrder), e.RemoteAddress, e.Port); }
             catch (Exception ex) { _logger?.LogWarning(ex, "Typed handler for {T} threw.", typeof(T).Name); }
         };
@@ -198,18 +197,14 @@ public sealed class UdpPlcServer : IPlcConnection
     private void DispatchTelegram(byte[] payload, string remoteAddress, int port)
     {
         // 1. MessageId-based dispatch
-        if (payload.Length >= 2)
+        foreach (var def in _registry.Definitions)
         {
-            ushort msgId = ReadTelegramId(payload);
-            foreach (var def in _registry.Definitions)
-            {
-                if (def.MessageId != 0 && def.MessageId == msgId)
-                {
-                    if (!ValidateLength(def, payload)) return;
-                    TryDeserializeAndFire(def, payload, remoteAddress, port);
-                    return;
-                }
-            }
+            if (def.MessageId == 0) continue;
+            if (!MatchesMessageId(payload, def)) continue;
+
+            if (!ValidateLength(def, payload)) return;
+            TryDeserializeAndFire(def, payload, remoteAddress, port);
+            return;
         }
 
         // 2. Size-based fallback
@@ -225,9 +220,8 @@ public sealed class UdpPlcServer : IPlcConnection
 
         // 3. No match — raise UnknownTelegramReceived
         _logger?.LogWarning(
-            "No matching UDP telegram definition for payload of {Length} bytes (candidate TelegramId=0x{Id:X4}).",
-            payload.Length,
-            payload.Length >= 2 ? ReadTelegramId(payload) : 0);
+            "No matching UDP telegram definition for payload of {Length} bytes.",
+            payload.Length);
         UnknownTelegramReceived?.Invoke(this, new UnknownTelegramEventArgs(payload, _byteOrder));
     }
 
@@ -277,10 +271,15 @@ public sealed class UdpPlcServer : IPlcConnection
         }
     }
 
-    private ushort ReadTelegramId(ReadOnlySpan<byte> data) =>
-        _byteOrder == ByteOrder.LittleEndian
-            ? BinaryPrimitives.ReadUInt16LittleEndian(data)
-            : BinaryPrimitives.ReadUInt16BigEndian(data);
+    private bool MatchesMessageId(byte[] payload, TelegramDefinition def)
+    {
+        int idSize   = S7TypeConverter.GetWireSize(def.MessageIdDataType);
+        int minBytes = def.MessageIdByteOffset + idSize;
+        if (payload.Length < minBytes) return false;
+
+        long actual = TelegramIdFramer.ReadId(payload, def.MessageIdByteOffset, def.MessageIdDataType, _byteOrder);
+        return actual == def.MessageId;
+    }
 
     public async ValueTask DisposeAsync()
     {

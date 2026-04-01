@@ -123,8 +123,8 @@ public sealed class TcpPlcServerBuilder
     /// <summary>
     /// Sets the TelegramId for the most recently registered telegram.
     /// </summary>
-    /// <param name="messageId">Unique 2-byte identifier for this telegram type.</param>
-    public TcpPlcServerBuilder WithMessageId(ushort messageId)
+    /// <param name="messageId">Numeric identifier for this telegram type. Any numeric value is accepted.</param>
+    public TcpPlcServerBuilder WithMessageId(long messageId)
     {
         if (_lastRegisteredDef is not null)
             _lastRegisteredDef.MessageId = messageId;
@@ -137,12 +137,12 @@ public sealed class TcpPlcServerBuilder
     /// </summary>
     /// <typeparam name="TType">
     /// S7 data type marker (e.g. <see cref="PlcComLib.DataTypes.S7Word"/>,
-    /// <see cref="PlcComLib.DataTypes.S7Int"/>) that determines the field width and
-    /// interpretation at <paramref name="byteOffset"/>.
+    /// <see cref="PlcComLib.DataTypes.S7Int"/>, <see cref="PlcComLib.DataTypes.S7DWord"/>)
+    /// that determines the field width and interpretation at <paramref name="byteOffset"/>.
     /// </typeparam>
-    /// <param name="id">Expected id value for this telegram type.</param>
+    /// <param name="id">Expected id value for this telegram type. Any numeric value is accepted.</param>
     /// <param name="byteOffset">Zero-based byte offset in the payload where the id is located.</param>
-    public TcpPlcServerBuilder WithMessageId<TType>(ushort id, int byteOffset)
+    public TcpPlcServerBuilder WithMessageId<TType>(long id, int byteOffset)
         where TType : IS7FramingType
     {
         if (_lastRegisteredDef is not null)
@@ -159,10 +159,11 @@ public sealed class TcpPlcServerBuilder
     /// Used by the <see cref="TelegramIdFramer"/> to determine message boundaries.
     /// For source-generated telegrams, pass <c>T.WireSize</c>.
     /// </summary>
-    public TcpPlcServerBuilder WithLength(int wireSize)
+    /// <param name="wireSize">Total wire size. Any numeric value is accepted.</param>
+    public TcpPlcServerBuilder WithLength(long wireSize)
     {
         if (_lastRegisteredDef is not null)
-            _lastRegisteredDef.ConfiguredWireSize = wireSize;
+            _lastRegisteredDef.ConfiguredWireSize = (int)wireSize;
         return this;
     }
 
@@ -178,14 +179,14 @@ public sealed class TcpPlcServerBuilder
     /// <see cref="PlcComLib.DataTypes.S7Int"/>) that determines the field width and
     /// interpretation at <paramref name="byteOffset"/>.
     /// </typeparam>
-    /// <param name="length">Expected total length in bytes.</param>
+    /// <param name="length">Expected total length in bytes. Any numeric value is accepted.</param>
     /// <param name="byteOffset">Zero-based byte offset in the payload where the length field is located.</param>
-    public TcpPlcServerBuilder WithLength<TType>(int length, int byteOffset)
+    public TcpPlcServerBuilder WithLength<TType>(long length, int byteOffset)
         where TType : IS7FramingType
     {
         if (_lastRegisteredDef is not null)
         {
-            _lastRegisteredDef.ConfiguredWireSize = length;
+            _lastRegisteredDef.ConfiguredWireSize = (int)length;
             _lastRegisteredDef.LengthByteOffset   = byteOffset;
             _lastRegisteredDef.LengthDataType     = TType.DataType;
         }
