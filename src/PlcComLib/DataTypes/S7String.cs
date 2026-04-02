@@ -1,6 +1,8 @@
 using System.Text;
 
 namespace PlcComLib.DataTypes;
+// ── plain S7String / S7WString kept for internal use by the serialiser ───────
+
 
 /// <summary>
 /// Represents a Siemens S7 STRING (single-byte character string).
@@ -104,4 +106,72 @@ public sealed class S7WString
     public override string ToString() => Value;
     public override bool Equals(object? obj) => obj is S7WString s && s.Value == Value && s.MaxLength == MaxLength;
     public override int GetHashCode() => HashCode.Combine(MaxLength, Value);
+}
+
+// ── Generic value structs (Option A) ─────────────────────────────────────────
+
+/// <summary>
+/// S7 STRING with a compile-time maximum length baked into the type.
+/// Assign and read as <see cref="string"/> via implicit operators.
+/// <code>public S7String&lt;L10&gt; Label { get; set; } = "hello";</code>
+/// </summary>
+/// <typeparam name="TLen">
+/// One of the pre-defined length structs (<see cref="L10"/>, <see cref="L32"/>, …) or a
+/// custom struct implementing <see cref="IS7Length"/>.
+/// </typeparam>
+public readonly struct S7String<TLen> : IS7FramingType
+    where TLen : struct, IS7Length
+{
+    private readonly string? _v;
+
+    public S7String(string value) => _v = value;
+
+    /// <summary>The string value. Never null — returns <see cref="string.Empty"/> for default instances.</summary>
+    public string Value => _v ?? string.Empty;
+
+    /// <summary>Maximum number of characters as declared by <typeparamref name="TLen"/>.</summary>
+    public static int MaxLength => TLen.Value;
+
+    public static S7DataType DataType => S7DataType.S7String;
+
+    /// <summary>Wire size in bytes: 2-byte header + <see cref="MaxLength"/> character bytes.</summary>
+    public static int WireSize => 2 + TLen.Value;
+
+    public static implicit operator S7String<TLen>(string v) => new(v);
+    public static implicit operator string(S7String<TLen> s) => s._v ?? string.Empty;
+
+    public override string ToString() => _v ?? string.Empty;
+}
+
+/// <summary>
+/// S7 WSTRING with a compile-time maximum length baked into the type.
+/// Assign and read as <see cref="string"/> via implicit operators.
+/// <code>public S7WString&lt;L20&gt; Title { get; set; } = "Maschine";</code>
+/// </summary>
+/// <typeparam name="TLen">
+/// One of the pre-defined length structs (<see cref="L10"/>, <see cref="L32"/>, …) or a
+/// custom struct implementing <see cref="IS7Length"/>.
+/// </typeparam>
+public readonly struct S7WString<TLen> : IS7FramingType
+    where TLen : struct, IS7Length
+{
+    private readonly string? _v;
+
+    public S7WString(string value) => _v = value;
+
+    /// <summary>The string value. Never null — returns <see cref="string.Empty"/> for default instances.</summary>
+    public string Value => _v ?? string.Empty;
+
+    /// <summary>Maximum number of characters as declared by <typeparamref name="TLen"/>.</summary>
+    public static int MaxLength => TLen.Value;
+
+    public static S7DataType DataType => S7DataType.S7WString;
+
+    /// <summary>Wire size in bytes: 4-byte header + <see cref="MaxLength"/> × 2 character bytes.</summary>
+    public static int WireSize => 4 + TLen.Value * 2;
+
+    public static implicit operator S7WString<TLen>(string v) => new(v);
+    public static implicit operator string(S7WString<TLen> s) => s._v ?? string.Empty;
+
+    public override string ToString() => _v ?? string.Empty;
 }
