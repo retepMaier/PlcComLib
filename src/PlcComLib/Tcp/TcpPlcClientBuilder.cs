@@ -21,6 +21,9 @@ public sealed class TcpPlcClientBuilder
     private readonly TelegramRegistry _registry = new();
     private ByteOrder _byteOrder = ByteOrder.BigEndian;
     private TelegramDefinition? _lastRegisteredDef;
+    private bool _noDelay = false;
+    private int _receiveBufferSize = 0;
+    private int _sendBufferSize = 0;
 
     /// <summary>Sets the remote host and TCP port to connect to.</summary>
     public TcpPlcClientBuilder ConnectTo(string host, int port)
@@ -44,10 +47,36 @@ public sealed class TcpPlcClientBuilder
         return this;
     }
 
+    /// <summary>
+    /// Disables Nagle's algorithm (TCP_NODELAY) on the socket.
+    /// Strongly recommended for low-latency PLC communication to avoid up to 200 ms coalescing delays.
+    /// Default: <c>false</c>.
+    /// </summary>
+    public TcpPlcClientBuilder WithNoDelay(bool noDelay = true)
+    {
+        _noDelay = noDelay;
+        return this;
+    }
 
+    /// <summary>
+    /// Sets the socket receive buffer size (SO_RCVBUF). <c>0</c> leaves the OS default unchanged.
+    /// Increase for high-throughput connections to reduce packet loss under burst load.
+    /// </summary>
+    public TcpPlcClientBuilder WithReceiveBufferSize(int size)
+    {
+        _receiveBufferSize = size;
+        return this;
+    }
 
-
-
+    /// <summary>
+    /// Sets the socket send buffer size (SO_SNDBUF). <c>0</c> leaves the OS default unchanged.
+    /// Increase for high-throughput connections to improve send performance.
+    /// </summary>
+    public TcpPlcClientBuilder WithSendBufferSize(int size)
+    {
+        _sendBufferSize = size;
+        return this;
+    }
     /// <summary>
     /// Sets the byte order for all multi-byte data fields on this connection.
     /// <see cref="ByteOrder.BigEndian"/> (default) for Siemens S7 PLCs;
@@ -160,6 +189,9 @@ public sealed class TcpPlcClientBuilder
             Port = _port,
             ReconnectIntervalMs = (int)_reconnectInterval.TotalMilliseconds,
             TimeoutMs = (int)_timeout.TotalMilliseconds,
+            NoDelay = _noDelay,
+            ReceiveBufferSize = _receiveBufferSize,
+            SendBufferSize = _sendBufferSize,
         };
         // Default framer: TelegramIdFramer — reads the first 2 bytes as TelegramId and
         // uses the registered wire size (from WithLength / field definitions) for framing.
