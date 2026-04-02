@@ -9,6 +9,7 @@ public sealed class TelegramFieldDefinition
     public S7DataType DataType { get; set; } = S7DataType.Word;
     public byte MaxStringLength { get; set; } = 0;
     public int RawByteCount { get; set; } = 0;
+    public string DefaultValue { get; set; } = string.Empty;
 }
 
 public sealed class TelegramDefinitionModel
@@ -58,6 +59,7 @@ public sealed class TelegramDefinitionModel
                 DataType = f.DataType,
                 MaxStringLength = f.MaxStringLength,
                 RawByteCount = f.RawByteCount,
+                DefaultValue = f.DefaultValue,
             }).ToList(),
         };
     }

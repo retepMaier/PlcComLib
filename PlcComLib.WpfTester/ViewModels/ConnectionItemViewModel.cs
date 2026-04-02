@@ -101,11 +101,47 @@ public sealed partial class ConnectionItemViewModel(ConnectionSettings settings,
         {
             var def = SelectedTelegram.ToTelegramDefinition();
             var telegram = new Telegram(def);
+            foreach (var field in SelectedTelegram.Fields)
+            {
+                if (string.IsNullOrEmpty(field.DefaultValue)) continue;
+                var value = ParseDefaultValue(field.DefaultValue, field.DataType);
+                if (value is not null)
+                    telegram.SetValue(field.Name, value);
+            }
             await _sendAction(telegram);
         }
         catch (Exception ex)
         {
             logService.Log(Models.LogLevel.Error, DisplayName, $"Send failed: {ex.Message}");
+        }
+    }
+
+    private static object? ParseDefaultValue(string text, S7DataType dataType)
+    {
+        try
+        {
+            return dataType switch
+            {
+                S7DataType.Bool => text == "1" || string.Equals(text, "true", StringComparison.OrdinalIgnoreCase),
+                S7DataType.Byte or S7DataType.USInt => byte.Parse(text),
+                S7DataType.Word or S7DataType.UInt => ushort.Parse(text),
+                S7DataType.DWord or S7DataType.UDInt => uint.Parse(text),
+                S7DataType.LWord or S7DataType.ULInt => ulong.Parse(text),
+                S7DataType.SInt => sbyte.Parse(text),
+                S7DataType.Int => short.Parse(text),
+                S7DataType.DInt => int.Parse(text),
+                S7DataType.LInt => long.Parse(text),
+                S7DataType.Real => float.Parse(text, System.Globalization.CultureInfo.InvariantCulture),
+                S7DataType.LReal => double.Parse(text, System.Globalization.CultureInfo.InvariantCulture),
+                S7DataType.Char => string.IsNullOrEmpty(text) ? null : (object)text[0],
+                S7DataType.WChar => string.IsNullOrEmpty(text) ? null : (object)text[0],
+                S7DataType.S7String or S7DataType.S7WString or S7DataType.CharArray => text,
+                _ => null,
+            };
+        }
+        catch
+        {
+            return null;
         }
     }
 

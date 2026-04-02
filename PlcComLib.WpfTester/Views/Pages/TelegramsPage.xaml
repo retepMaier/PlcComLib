@@ -18,6 +18,14 @@
             <Setter Property="Margin" Value="0,0,0,4"/>
             <Setter Property="Opacity" Value="0.8"/>
         </Style>
+        <!-- Dim disabled controls without changing IsEnabled styling globally -->
+        <Style x:Key="DisabledDimStyle" TargetType="Control">
+            <Style.Triggers>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Opacity" Value="0.35"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
     </Page.Resources>
 
     <Grid Margin="24,16,24,16">
@@ -57,9 +65,9 @@
         <!-- Two-column layout: telegram list (left) + field editor (right) -->
         <Grid Grid.Row="1">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*" MinWidth="220"/>
                 <ColumnDefinition Width="16"/>
-                <ColumnDefinition Width="320"/>
+                <ColumnDefinition Width="2*" MinWidth="380"/>
             </Grid.ColumnDefinitions>
 
             <!-- Left: Telegram list + Add form -->
@@ -77,11 +85,11 @@
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="12"/>
-                                <ColumnDefinition Width="100"/>
+                                <ColumnDefinition Width="80"/>
                                 <ColumnDefinition Width="12"/>
-                                <ColumnDefinition Width="100"/>
+                                <ColumnDefinition Width="60"/>
                                 <ColumnDefinition Width="12"/>
-                                <ColumnDefinition Width="100"/>
+                                <ColumnDefinition Width="90"/>
                             </Grid.ColumnDefinitions>
                             <StackPanel Grid.Column="0">
                                 <TextBlock Text="Name" Style="{StaticResource FieldLabel}"/>
@@ -113,9 +121,9 @@
                 </ui:Card>
 
                 <!-- Telegram List -->
-                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" >
+                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
                     <StackPanel>
-                        <ItemsControl ItemsSource="{Binding Telegrams}" >
+                        <ItemsControl ItemsSource="{Binding Telegrams}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate DataType="{x:Type models:TelegramDefinitionModel}">
                                     <ui:Card Margin="0,0,0,8" Padding="12">
@@ -210,7 +218,8 @@
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
 
-                    <ui:Card Grid.Row="0" Padding="12" Margin="0,0,0,12">
+                    <!-- Add Field Form -->
+                    <ui:Card Grid.Row="0" Padding="12" Margin="0,0,0,8">
                         <StackPanel>
                             <TextBlock FontWeight="SemiBold" Margin="0,0,0,8">
                                 <Run Text="Fields of: "/>
@@ -219,13 +228,17 @@
                             <Grid Margin="0,0,0,8">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="12"/>
+                                    <ColumnDefinition Width="8"/>
+                                    <ColumnDefinition Width="110"/>
+                                    <ColumnDefinition Width="8"/>
                                     <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="8"/>
+                                    <ColumnDefinition Width="70"/>
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0">
                                     <TextBlock Text="Field Name" Style="{StaticResource FieldLabel}"/>
                                     <ui:TextBox
-                                        PlaceholderText="e.g. MessageId"
+                                        PlaceholderText="e.g. Speed"
                                         Text="{Binding NewFieldName, UpdateSourceTrigger=PropertyChanged}"/>
                                 </StackPanel>
                                 <StackPanel Grid.Column="2">
@@ -234,6 +247,31 @@
                                         ItemsSource="{Binding DataTypes}"
                                         SelectedItem="{Binding NewFieldDataType}"
                                         HorizontalAlignment="Stretch"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="4">
+                                    <TextBlock Text="Default Value" Style="{StaticResource FieldLabel}"/>
+                                    <ui:TextBox
+                                        PlaceholderText="(optional)"
+                                        Text="{Binding NewFieldDefaultValue, UpdateSourceTrigger=PropertyChanged}"/>
+                                </StackPanel>
+                                <!-- Length: always laid out, disabled+dimmed when not applicable -->
+                                <StackPanel Grid.Column="6">
+                                    <TextBlock Text="Length">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock" BasedOn="{StaticResource FieldLabel}">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding NewFieldNeedsLength}" Value="False">
+                                                        <Setter Property="Opacity" Value="0.3"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                    <ui:NumberBox
+                                        Value="{Binding NewFieldLength}"
+                                        Minimum="0" Maximum="65535"
+                                        IsEnabled="{Binding NewFieldNeedsLength}"
+                                        Style="{StaticResource DisabledDimStyle}"/>
                                 </StackPanel>
                             </Grid>
                             <ui:Button
@@ -244,35 +282,122 @@
                         </StackPanel>
                     </ui:Card>
 
-                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
-                        <ItemsControl ItemsSource="{Binding CurrentTelegramFields}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate DataType="{x:Type models:TelegramFieldDefinition}">
-                                    <Border Padding="8,6" Margin="0,2" CornerRadius="4"
-                                            Background="{DynamicResource ControlFillColorDefaultBrush}">
-                                        <Grid>
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="Auto"/>
-                                            </Grid.ColumnDefinitions>
-                                            <TextBlock VerticalAlignment="Center" FontFamily="Consolas" FontSize="11">
-                                                <Run Text="{Binding Name}" FontWeight="SemiBold"/>
-                                                <Run Text=" : "/>
-                                                <Run Text="{Binding DataType}"/>
-                                            </TextBlock>
+                    <!-- Field table -->
+                    <DataGrid
+                        Grid.Row="1"
+                        ItemsSource="{Binding CurrentTelegramFields}"
+                        AutoGenerateColumns="False"
+                        CanUserAddRows="False"
+                        CanUserDeleteRows="False"
+                        CanUserReorderColumns="False"
+                        CanUserSortColumns="False"
+                        SelectionMode="Single"
+                        HeadersVisibility="Column"
+                        RowHeaderWidth="0"
+                        GridLinesVisibility="Horizontal"
+                        BorderThickness="1"
+                        BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}">
+
+                        <DataGrid.Resources>
+                            <!-- Single-click to start editing a cell -->
+                            <Style TargetType="DataGridCell">
+                                <EventSetter Event="PreviewMouseLeftButtonDown" Handler="FieldCell_PreviewMouseLeftButtonDown"/>
+                            </Style>
+                        </DataGrid.Resources>
+
+                        <DataGrid.Columns>
+
+                            <!-- Name -->
+                            <DataGridTemplateColumn Header="Name" Width="*" MinWidth="80">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBox
+                                            Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}"
+                                            BorderThickness="0"
+                                            Background="Transparent"
+                                            VerticalContentAlignment="Center"
+                                            Padding="4,2"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+
+                            <!-- Data Type -->
+                            <DataGridTemplateColumn Header="Data Type" Width="115">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <ComboBox
+                                            ItemsSource="{Binding DataContext.DataTypes, RelativeSource={RelativeSource AncestorType=Page}}"
+                                            SelectedItem="{Binding DataType, UpdateSourceTrigger=PropertyChanged}"
+                                            BorderThickness="0"
+                                            Background="Transparent"
+                                            VerticalContentAlignment="Center"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+
+                            <!-- Default Value -->
+                            <DataGridTemplateColumn Header="Default Value" Width="*" MinWidth="80">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBox
+                                            Text="{Binding DefaultValue, UpdateSourceTrigger=PropertyChanged}"
+                                            BorderThickness="0"
+                                            Background="Transparent"
+                                            VerticalContentAlignment="Center"
+                                            Padding="4,2"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+
+                            <!-- Length (only relevant for string / array / raw types) -->
+                            <DataGridTemplateColumn Header="Length" Width="65">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBox
+                                            Text="{Binding Length, UpdateSourceTrigger=PropertyChanged}"
+                                            IsEnabled="{Binding NeedsLength}"
+                                            BorderThickness="0"
+                                            Background="Transparent"
+                                            VerticalContentAlignment="Center"
+                                            Padding="4,2"
+                                            Style="{StaticResource DisabledDimStyle}"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+
+                            <!-- Actions: Move Up / Move Down / Delete -->
+                            <DataGridTemplateColumn Header="" Width="92">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="2,0">
                                             <ui:Button
-                                                Grid.Column="1"
+                                                Icon="{ui:SymbolIcon Symbol=ArrowUp24}"
+                                                Padding="4"
+                                                Margin="0,0,2,0"
+                                                ToolTip="Move up"
+                                                Command="{Binding DataContext.MoveFieldUpCommand, RelativeSource={RelativeSource AncestorType=Page}}"
+                                                CommandParameter="{Binding}"/>
+                                            <ui:Button
+                                                Icon="{ui:SymbolIcon Symbol=ArrowDown24}"
+                                                Padding="4"
+                                                Margin="0,0,2,0"
+                                                ToolTip="Move down"
+                                                Command="{Binding DataContext.MoveFieldDownCommand, RelativeSource={RelativeSource AncestorType=Page}}"
+                                                CommandParameter="{Binding}"/>
+                                            <ui:Button
                                                 Icon="{ui:SymbolIcon Symbol=Delete24}"
                                                 Appearance="Danger"
                                                 Padding="4"
+                                                ToolTip="Delete field"
                                                 Command="{Binding DataContext.RemoveFieldCommand, RelativeSource={RelativeSource AncestorType=Page}}"
                                                 CommandParameter="{Binding}"/>
-                                        </Grid>
-                                    </Border>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </ScrollViewer>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+
+                        </DataGrid.Columns>
+                    </DataGrid>
                 </Grid>
             </Grid>
         </Grid>

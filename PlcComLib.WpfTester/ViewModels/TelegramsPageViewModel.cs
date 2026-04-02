@@ -18,19 +18,32 @@ public sealed partial class TelegramsPageViewModel(ITelegramLibraryService teleg
 
     public bool HasSelectedTelegram => SelectedTelegram is not null;
 
-    public ObservableCollection<TelegramFieldDefinition> CurrentTelegramFields { get; } = [];
+    public ObservableCollection<TelegramFieldItemViewModel> CurrentTelegramFields { get; } = [];
 
-    [ObservableProperty]    public partial string NewTelegramName { get; set; } = string.Empty;
+    [ObservableProperty] public partial string NewTelegramName { get; set; } = string.Empty;
 
-    [ObservableProperty]    public partial long NewTelegramMessageId { get; set; } = 0;
+    [ObservableProperty] public partial long NewTelegramMessageId { get; set; } = 0;
 
-    [ObservableProperty]    public partial int NewTelegramMessageIdOffset { get; set; } = 0;
+    [ObservableProperty] public partial int NewTelegramMessageIdOffset { get; set; } = 0;
 
-    [ObservableProperty]    public partial S7DataType NewTelegramMessageIdType { get; set; } = S7DataType.Word;
+    [ObservableProperty] public partial S7DataType NewTelegramMessageIdType { get; set; } = S7DataType.Word;
 
-    [ObservableProperty]    public partial string NewFieldName { get; set; } = string.Empty;
+    [ObservableProperty] public partial string NewFieldName { get; set; } = string.Empty;
 
-    [ObservableProperty]    public partial S7DataType NewFieldDataType { get; set; } = S7DataType.Word;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(NewFieldNeedsLength))]
+    public partial S7DataType NewFieldDataType { get; set; } = S7DataType.Word;
+
+    [ObservableProperty] public partial string NewFieldDefaultValue { get; set; } = string.Empty;
+
+    [ObservableProperty] public partial int NewFieldLength { get; set; } = 0;
+
+    public bool NewFieldNeedsLength =>
+        NewFieldDataType is S7DataType.S7String
+                         or S7DataType.S7WString
+                         or S7DataType.CharArray
+                         or S7DataType.Raw;
+
     public IReadOnlyList<S7DataType> DataTypes { get; } = Enum.GetValues<S7DataType>();
 
     [RelayCommand]
@@ -71,7 +84,7 @@ public sealed partial class TelegramsPageViewModel(ITelegramLibraryService teleg
         SelectedTelegram = t;
         CurrentTelegramFields.Clear();
         foreach (var f in t.Fields)
-            CurrentTelegramFields.Add(f);
+            CurrentTelegramFields.Add(new TelegramFieldItemViewModel(f));
     }
 
     [RelayCommand]
@@ -82,18 +95,52 @@ public sealed partial class TelegramsPageViewModel(ITelegramLibraryService teleg
         {
             Name = NewFieldName,
             DataType = NewFieldDataType,
+            DefaultValue = NewFieldDefaultValue,
         };
+        if (NewFieldNeedsLength)
+        {
+            if (NewFieldDataType == S7DataType.Raw)
+                field.RawByteCount = Math.Max(0, NewFieldLength);
+            else
+                field.MaxStringLength = (byte)Math.Clamp(NewFieldLength, 0, 255);
+        }
         SelectedTelegram.Fields.Add(field);
-        CurrentTelegramFields.Add(field);
+        CurrentTelegramFields.Add(new TelegramFieldItemViewModel(field));
         NewFieldName = string.Empty;
+        NewFieldDefaultValue = string.Empty;
+        NewFieldLength = 0;
     }
 
     [RelayCommand]
-    private void RemoveField(TelegramFieldDefinition? f)
+    private void RemoveField(TelegramFieldItemViewModel? item)
     {
-        if (f is null || SelectedTelegram is null) return;
-        SelectedTelegram.Fields.Remove(f);
-        CurrentTelegramFields.Remove(f);
+        if (item is null || SelectedTelegram is null) return;
+        SelectedTelegram.Fields.Remove(item.Field);
+        CurrentTelegramFields.Remove(item);
+    }
+
+    [RelayCommand]
+    private void MoveFieldUp(TelegramFieldItemViewModel? item)
+    {
+        if (item is null || SelectedTelegram is null) return;
+        var idx = CurrentTelegramFields.IndexOf(item);
+        if (idx <= 0) return;
+        CurrentTelegramFields.Move(idx, idx - 1);
+        var field = SelectedTelegram.Fields[idx];
+        SelectedTelegram.Fields.RemoveAt(idx);
+        SelectedTelegram.Fields.Insert(idx - 1, field);
+    }
+
+    [RelayCommand]
+    private void MoveFieldDown(TelegramFieldItemViewModel? item)
+    {
+        if (item is null || SelectedTelegram is null) return;
+        var idx = CurrentTelegramFields.IndexOf(item);
+        if (idx < 0 || idx >= CurrentTelegramFields.Count - 1) return;
+        CurrentTelegramFields.Move(idx, idx + 1);
+        var field = SelectedTelegram.Fields[idx];
+        SelectedTelegram.Fields.RemoveAt(idx);
+        SelectedTelegram.Fields.Insert(idx + 1, field);
     }
 
     [RelayCommand]
@@ -145,3 +192,4 @@ public sealed partial class TelegramsPageViewModel(ITelegramLibraryService teleg
         }
     }
 }
+
