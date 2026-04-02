@@ -1,12 +1,13 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using System.Windows;
-using Wpf.Ui;
-using Wpf.Ui.Abstractions;
 using PlcComLib.WpfTester.Services;
 using PlcComLib.WpfTester.ViewModels;
 using PlcComLib.WpfTester.Views;
 using PlcComLib.WpfTester.Views.Pages;
+using System.Windows;
+using System.Windows.Threading;
+using Wpf.Ui;
+using Wpf.Ui.Abstractions;
 
 namespace PlcComLib.WpfTester;
 
@@ -54,5 +55,12 @@ public partial class App : Application
             _host.Dispose();
         }
         base.OnExit(e);
+    }
+
+
+    private void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
+    {
+        // For more info see https://docs.microsoft.com/en-us/dotnet/api/system.windows.application.dispatcherunhandledexception?view=windowsdesktop-6.0
+        e.Handled = true;
     }
 }

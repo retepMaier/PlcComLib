@@ -9,6 +9,6 @@
     <Project Path="tests/PlcComLib.SourceGenerator.Tests/PlcComLib.SourceGenerator.Tests.csproj" />
   </Folder>
   <Project Path="PlcComLib.WpfTester/PlcComLib.WpfTester.csproj">
-    <Build Solution="Debug|*" Project="false" />
+   
   </Project>
 </Solution>

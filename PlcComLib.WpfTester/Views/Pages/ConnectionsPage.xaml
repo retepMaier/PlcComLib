@@ -6,6 +6,9 @@
     xmlns:vm="clr-namespace:PlcComLib.WpfTester.ViewModels"
     xmlns:models="clr-namespace:PlcComLib.WpfTester.Models"
     xmlns:views="clr-namespace:PlcComLib.WpfTester.Views.Dialogs"
+    ui:Design.Background="{DynamicResource ApplicationBackgroundBrush}"
+ui:Design.Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+Foreground="{DynamicResource TextFillColorPrimaryBrush}"
     Title="Connections">
 
     <Page.Resources>
