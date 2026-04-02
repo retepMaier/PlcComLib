@@ -58,8 +58,8 @@ public sealed partial class TelegramFieldItemViewModel : ObservableObject
 
     partial void OnDataTypeChanged(S7DataType value)
     {
-        Field.DataType = value;
         if (_initializing) return;
+        Field.DataType = value;
         if (!NeedsLength)
         {
             Field.MaxStringLength = 0;

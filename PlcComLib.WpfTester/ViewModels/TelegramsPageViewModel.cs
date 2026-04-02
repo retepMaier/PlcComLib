@@ -125,8 +125,8 @@ public sealed partial class TelegramsPageViewModel(ITelegramLibraryService teleg
         if (item is null || SelectedTelegram is null) return;
         var idx = CurrentTelegramFields.IndexOf(item);
         if (idx <= 0) return;
-        CurrentTelegramFields.Move(idx, idx - 1);
         var field = SelectedTelegram.Fields[idx];
+        CurrentTelegramFields.Move(idx, idx - 1);
         SelectedTelegram.Fields.RemoveAt(idx);
         SelectedTelegram.Fields.Insert(idx - 1, field);
     }
@@ -137,8 +137,8 @@ public sealed partial class TelegramsPageViewModel(ITelegramLibraryService teleg
         if (item is null || SelectedTelegram is null) return;
         var idx = CurrentTelegramFields.IndexOf(item);
         if (idx < 0 || idx >= CurrentTelegramFields.Count - 1) return;
-        CurrentTelegramFields.Move(idx, idx + 1);
         var field = SelectedTelegram.Fields[idx];
+        CurrentTelegramFields.Move(idx, idx + 1);
         SelectedTelegram.Fields.RemoveAt(idx);
         SelectedTelegram.Fields.Insert(idx + 1, field);
     }
