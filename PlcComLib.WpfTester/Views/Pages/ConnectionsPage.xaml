@@ -40,7 +40,7 @@
 
         <!-- Connections List -->
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
-            <ItemsControl ItemsSource="{Binding Connections}">
+            <ItemsControl ItemsSource="{Binding Connections, Mode=OneWay}">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate DataType="{x:Type vm:ConnectionItemViewModel}">
                         <ui:Card Margin="0,0,0,12" Padding="0">
@@ -89,9 +89,9 @@
                                                 <TextBlock
                                                     FontSize="11"
                                                     Opacity="0.7">
-                                                    <Run Text="{Binding TypeLabel}"/>
+                                                    <Run Text="{Binding TypeLabel, Mode=OneWay}"/>
                                                     <Run Text=" | "/>
-                                                    <Run Text="{Binding HostPort}"/>
+                                                    <Run Text="{Binding HostPort, Mode=OneWay}"/>
                                                     <Run Text=" | "/>
                                                     <Run Text="{Binding Settings.ByteOrder}"/>
                                                 </TextBlock>
