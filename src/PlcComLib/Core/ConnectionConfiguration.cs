@@ -25,4 +25,23 @@ public sealed class ConnectionConfiguration
 
     /// <summary>Maximum number of concurrent client connections (TCP server only).</summary>
     public int MaxConnections { get; init; } = 10;
+
+    /// <summary>
+    /// When <c>true</c>, disables Nagle's algorithm (TCP_NODELAY) on the socket.
+    /// Recommended for low-latency PLC communication. Default: <c>false</c>.
+    /// Only applies to TCP connections.
+    /// </summary>
+    public bool NoDelay { get; init; } = false;
+
+    /// <summary>
+    /// Socket receive buffer size in bytes. <c>0</c> leaves the OS default unchanged.
+    /// Increasing this value reduces packet loss under burst load.
+    /// </summary>
+    public int ReceiveBufferSize { get; init; } = 0;
+
+    /// <summary>
+    /// Socket send buffer size in bytes. <c>0</c> leaves the OS default unchanged.
+    /// Increasing this value improves throughput when sending large amounts of data.
+    /// </summary>
+    public int SendBufferSize { get; init; } = 0;
 }

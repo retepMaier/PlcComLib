@@ -21,6 +21,9 @@ public sealed class TcpPlcServerBuilder
     private readonly TelegramRegistry _registry = new();
     private ByteOrder _byteOrder = ByteOrder.BigEndian;
     private TelegramDefinition? _lastRegisteredDef;
+    private bool _noDelay = false;
+    private int _receiveBufferSize = 0;
+    private int _sendBufferSize = 0;
 
     /// <summary>Local address and TCP port to bind to. Use <c>"0.0.0.0"</c> for all interfaces.</summary>
     public TcpPlcServerBuilder ListenOn(string host, int port)
@@ -44,10 +47,36 @@ public sealed class TcpPlcServerBuilder
         return this;
     }
 
+    /// <summary>
+    /// Disables Nagle's algorithm (TCP_NODELAY) on each accepted client socket.
+    /// Strongly recommended for low-latency PLC communication to avoid up to 200 ms coalescing delays.
+    /// Default: <c>false</c>.
+    /// </summary>
+    public TcpPlcServerBuilder WithNoDelay(bool noDelay = true)
+    {
+        _noDelay = noDelay;
+        return this;
+    }
 
+    /// <summary>
+    /// Sets the socket receive buffer size (SO_RCVBUF) for each accepted client. <c>0</c> leaves the OS default unchanged.
+    /// Increase for high-throughput connections to reduce packet loss under burst load.
+    /// </summary>
+    public TcpPlcServerBuilder WithReceiveBufferSize(int size)
+    {
+        _receiveBufferSize = size;
+        return this;
+    }
 
-
-
+    /// <summary>
+    /// Sets the socket send buffer size (SO_SNDBUF) for each accepted client. <c>0</c> leaves the OS default unchanged.
+    /// Increase for high-throughput connections to improve send performance.
+    /// </summary>
+    public TcpPlcServerBuilder WithSendBufferSize(int size)
+    {
+        _sendBufferSize = size;
+        return this;
+    }
     /// <summary>
     /// Sets the byte order for all multi-byte data fields on this connection.
     /// <see cref="ByteOrder.BigEndian"/> (default) for Siemens S7 PLCs;
@@ -159,6 +188,9 @@ public sealed class TcpPlcServerBuilder
             TimeoutMs = (int)_timeout.TotalMilliseconds,
             MaxConnections = _maxConnections,
             Mode = ConnectionMode.Server,
+            NoDelay = _noDelay,
+            ReceiveBufferSize = _receiveBufferSize,
+            SendBufferSize = _sendBufferSize,
         };
         var framer = _framer ?? (_useLengthFramer
             ? new LengthFramer(_byteOrder)

@@ -19,6 +19,21 @@ public sealed class UdpPlcClient(
 {
     private readonly ConnectionConfiguration _config = config ?? throw new ArgumentNullException(nameof(config));
     private readonly TelegramRegistry _registry = registry ?? throw new ArgumentNullException(nameof(registry));
+
+    // Pre-built dispatch lookup tables — see TcpPlcClient for rationale.
+    private readonly (int Offset, S7DataType Type, Dictionary<long, TelegramDefinition> Lookup)[] _idGroups =
+        registry!.Definitions
+            .Where(d => d.MessageId != 0)
+            .GroupBy(d => (d.MessageIdByteOffset, d.MessageIdDataType))
+            .Select(g => (g.Key.MessageIdByteOffset, g.Key.MessageIdDataType, g.ToDictionary(d => d.MessageId)))
+            .ToArray();
+
+    private readonly Dictionary<int, TelegramDefinition> _sizeIndex =
+        registry!.Definitions
+            .Where(d => d.MessageId == 0 && d.EffectiveWireSize > 0)
+            .GroupBy(d => d.EffectiveWireSize)
+            .ToDictionary(g => g.Key, g => g.First());
+
     private UdpClient? _udpClient;
     private CancellationTokenSource? _cts;
     private Task? _receiveTask;
@@ -49,8 +64,10 @@ public sealed class UdpPlcClient(
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         _udpClient = new UdpClient();
-        _udpClient.Client.SendTimeout = _config.TimeoutMs;
+        _udpClient.Client.SendTimeout    = _config.TimeoutMs;
         _udpClient.Client.ReceiveTimeout = _config.TimeoutMs;
+        if (_config.ReceiveBufferSize > 0) _udpClient.Client.ReceiveBufferSize = _config.ReceiveBufferSize;
+        if (_config.SendBufferSize    > 0) _udpClient.Client.SendBufferSize    = _config.SendBufferSize;
         _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _isConnected = true;
         ConnectionStateChanged?.Invoke(this, new ConnectionStateChangedEventArgs(true, "UDP client started"));
@@ -155,7 +172,11 @@ public sealed class UdpPlcClient(
                 logger?.LogWarning(ex, "UDP receive error.");
                 break;
             }
-            string remoteAddress = result.RemoteEndPoint.Address.ToString();
+            // Only call ToString() when someone is actually listening — avoids a heap allocation per datagram.
+            bool hasSubscribers = RawBytesReceived is not null || TelegramReceived is not null || UnknownTelegramReceived is not null;
+            string remoteAddress = hasSubscribers
+                ? result.RemoteEndPoint.Address.ToString()
+                : string.Empty;
             int remotePort = result.RemoteEndPoint.Port;
             RawBytesReceived?.Invoke(this, new RawBytesEventArgs(result.Buffer, remoteAddress, remotePort));
             DispatchTelegram(result.Buffer, remoteAddress, remotePort);
@@ -164,26 +185,25 @@ public sealed class UdpPlcClient(
 
     private void DispatchTelegram(byte[] payload, string remoteAddress, int port)
     {
-        // 1. MessageId-based dispatch
-        foreach (var def in _registry.Definitions)
+        // 1. MessageId-based dispatch — O(1) per (offset, type) group.
+        foreach (var (offset, type, lookup) in _idGroups)
         {
-            if (def.MessageId == 0) continue;
-            if (!MatchesMessageId(payload, def)) continue;
+            int idSize = S7TypeConverter.GetWireSize(type);
+            if (payload.Length < offset + idSize) continue;
+            long id = TelegramIdFramer.ReadId(payload, offset, type, byteOrder);
+            if (!lookup.TryGetValue(id, out var def)) continue;
 
             if (!ValidateLength(def, payload)) return;
             TryDeserializeAndFire(def, payload, remoteAddress, port);
             return;
         }
 
-        // 2. Size-based fallback
-        foreach (var def in _registry.Definitions)
+        // 2. Size-based fallback — O(1) dictionary lookup.
+        if (_sizeIndex.TryGetValue(payload.Length, out var sizeDef))
         {
-            if (def.MessageId == 0 && def.EffectiveWireSize == payload.Length)
-            {
-                if (!ValidateLength(def, payload)) return;
-                TryDeserializeAndFire(def, payload, remoteAddress, port);
-                return;
-            }
+            if (!ValidateLength(sizeDef, payload)) return;
+            TryDeserializeAndFire(sizeDef, payload, remoteAddress, port);
+            return;
         }
 
         // 3. No match — raise UnknownTelegramReceived

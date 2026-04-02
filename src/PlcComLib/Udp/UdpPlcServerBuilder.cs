@@ -16,12 +16,34 @@ public sealed class UdpPlcServerBuilder
     private readonly TelegramRegistry _registry = new();
     private ByteOrder _byteOrder = ByteOrder.BigEndian;
     private TelegramDefinition? _lastRegisteredDef;
+    private int _receiveBufferSize = 0;
+    private int _sendBufferSize = 0;
 
     /// <summary>Local IP address and UDP port to listen on. Use <c>"0.0.0.0"</c> for all interfaces.</summary>
     public UdpPlcServerBuilder ListenOn(string host, int port)
     {
         _host = host;
         _port = port;
+        return this;
+    }
+
+    /// <summary>
+    /// Sets the socket receive buffer size (SO_RCVBUF). <c>0</c> leaves the OS default unchanged.
+    /// Increase for high-throughput connections to reduce datagram loss under burst load.
+    /// </summary>
+    public UdpPlcServerBuilder WithReceiveBufferSize(int size)
+    {
+        _receiveBufferSize = size;
+        return this;
+    }
+
+    /// <summary>
+    /// Sets the socket send buffer size (SO_SNDBUF). <c>0</c> leaves the OS default unchanged.
+    /// Increase for high-throughput connections to improve send performance.
+    /// </summary>
+    public UdpPlcServerBuilder WithSendBufferSize(int size)
+    {
+        _sendBufferSize = size;
         return this;
     }
 
@@ -135,6 +157,8 @@ public sealed class UdpPlcServerBuilder
             Host = _host,
             Port = _port,
             Mode = ConnectionMode.Server,
+            ReceiveBufferSize = _receiveBufferSize,
+            SendBufferSize = _sendBufferSize,
         };
         return new UdpPlcServer(config, _registry, _logger, _byteOrder);
     }

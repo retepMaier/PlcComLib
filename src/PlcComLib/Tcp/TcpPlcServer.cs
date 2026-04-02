@@ -23,6 +23,21 @@ public sealed class TcpPlcServer(
     private readonly ConnectionConfiguration _config = config ?? throw new ArgumentNullException(nameof(config));
     private readonly TelegramRegistry _registry = registry ?? throw new ArgumentNullException(nameof(registry));
     private readonly IMessageFramer _framer = framer ?? new TelegramIdFramer(registry.Definitions, byteOrder);
+
+    // Pre-built dispatch lookup tables — see TcpPlcClient for rationale.
+    private readonly (int Offset, S7DataType Type, Dictionary<long, TelegramDefinition> Lookup)[] _idGroups =
+        registry!.Definitions
+            .Where(d => d.MessageId != 0)
+            .GroupBy(d => (d.MessageIdByteOffset, d.MessageIdDataType))
+            .Select(g => (g.Key.MessageIdByteOffset, g.Key.MessageIdDataType, g.ToDictionary(d => d.MessageId)))
+            .ToArray();
+
+    private readonly Dictionary<int, TelegramDefinition> _sizeIndex =
+        registry!.Definitions
+            .Where(d => d.MessageId == 0 && d.EffectiveWireSize > 0)
+            .GroupBy(d => d.EffectiveWireSize)
+            .ToDictionary(g => g.Key, g => g.First());
+
     private TcpListener? _listener;
     private CancellationTokenSource? _cts;
     private Task? _acceptTask;
@@ -173,10 +188,21 @@ public sealed class TcpPlcServer(
             catch (OperationCanceledException) { break; }
             catch (Exception ex) { logger?.LogError(ex, "Accept error."); break; }
 
+            // Apply low-latency socket options to each accepted connection.
+            client.NoDelay = _config.NoDelay;
+            if (_config.ReceiveBufferSize > 0) client.ReceiveBufferSize = _config.ReceiveBufferSize;
+            if (_config.SendBufferSize    > 0) client.SendBufferSize    = _config.SendBufferSize;
+
             var ctx = new ClientContext(client, Guid.NewGuid());
             _clients[ctx.Id] = ctx;
             logger?.LogInformation("Client {Id} connected from {Endpoint}.", ctx.Id, client.Client.RemoteEndPoint);
-            _ = HandleClientAsync(ctx, ct);
+
+            // Run the per-client handler without awaiting, but ensure unhandled exceptions are logged.
+            _ = HandleClientAsync(ctx, ct).ContinueWith(
+                t => logger?.LogError(t.Exception, "Unhandled exception in client handler for {Id}.", ctx.Id),
+                CancellationToken.None,
+                TaskContinuationOptions.OnlyOnFaulted,
+                TaskScheduler.Default);
         }
     }
 
@@ -192,9 +218,13 @@ public sealed class TcpPlcServer(
                 try { bytesRead = await ctx.Stream.ReadAsync(buffer, ct); }
                 catch { break; }
                 if (bytesRead == 0) break;
-                var received = new byte[bytesRead];
-                Array.Copy(buffer, received, bytesRead);
-                RawBytesReceived?.Invoke(this, new RawBytesEventArgs(received, ctx.RemoteAddress, ctx.Port));
+                // Only materialise a separate copy for the diagnostic event when someone is listening.
+                if (RawBytesReceived is { } rawReceived)
+                {
+                    var received = new byte[bytesRead];
+                    Array.Copy(buffer, received, bytesRead);
+                    rawReceived.Invoke(this, new RawBytesEventArgs(received, ctx.RemoteAddress, ctx.Port));
+                }
                 accumulated.Write(buffer, 0, bytesRead);
                 ProcessBuffer(accumulated, ctx);
             }
@@ -211,7 +241,13 @@ public sealed class TcpPlcServer(
     {
         while (true)
         {
-            var data = accumulated.ToArray();
+            int dataLength = (int)accumulated.Length;
+            if (dataLength == 0) break;
+
+            // Use GetBuffer() to get a span over the internal array without allocating a copy.
+            byte[] rawBuffer = accumulated.GetBuffer();
+            var data = rawBuffer.AsSpan(0, dataLength);
+
             if (!_framer.TryExtract(data, out var message, out int consumed))
             {
                 if (consumed > 0)
@@ -219,42 +255,52 @@ public sealed class TcpPlcServer(
                     // Definite ID mismatch — discard unrecognised byte(s) and keep scanning.
                     logger?.LogWarning(
                         "Unrecognised telegram ID in receive buffer; discarding {Count} byte(s).", consumed);
-                    int rem = data.Length - consumed;
-                    accumulated.SetLength(0);
-                    if (rem > 0) accumulated.Write(data, consumed, rem);
+                    int rem = dataLength - consumed;
+                    if (rem > 0)
+                    {
+                        accumulated.Position = 0;
+                        accumulated.Write(rawBuffer, consumed, rem);
+                    }
+                    accumulated.SetLength(rem);
                     continue;
                 }
                 break; // Insufficient data — wait for more bytes.
             }
-            int remaining = data.Length - consumed;
-            accumulated.SetLength(0);
-            if (remaining > 0) accumulated.Write(data, consumed, remaining);
-            DispatchTelegram(message.ToArray(), ctx);
+
+            int remaining = dataLength - consumed;
+            var msgArray = message.ToArray();
+            if (remaining > 0)
+            {
+                accumulated.Position = 0;
+                accumulated.Write(rawBuffer, consumed, remaining);
+            }
+            accumulated.SetLength(remaining);
+
+            DispatchTelegram(msgArray, ctx);
         }
     }
 
     private void DispatchTelegram(byte[] payload, ClientContext ctx)
     {
-        // 1. MessageId-based dispatch
-        foreach (var def in _registry.Definitions)
+        // 1. MessageId-based dispatch — O(1) per (offset, type) group.
+        foreach (var (offset, type, lookup) in _idGroups)
         {
-            if (def.MessageId == 0) continue;
-            if (!MatchesMessageId(payload, def)) continue;
+            int idSize = S7TypeConverter.GetWireSize(type);
+            if (payload.Length < offset + idSize) continue;
+            long id = TelegramIdFramer.ReadId(payload, offset, type, byteOrder);
+            if (!lookup.TryGetValue(id, out var def)) continue;
 
             if (!ValidateLength(def, payload, ctx)) return;
             TryDeserializeAndFire(def, payload, ctx);
             return;
         }
 
-        // 2. Size-based fallback
-        foreach (var def in _registry.Definitions)
+        // 2. Size-based fallback — O(1) dictionary lookup.
+        if (_sizeIndex.TryGetValue(payload.Length, out var sizeDef))
         {
-            if (def.MessageId == 0 && def.EffectiveWireSize == payload.Length)
-            {
-                if (!ValidateLength(def, payload, ctx)) return;
-                TryDeserializeAndFire(def, payload, ctx);
-                return;
-            }
+            if (!ValidateLength(sizeDef, payload, ctx)) return;
+            TryDeserializeAndFire(sizeDef, payload, ctx);
+            return;
         }
 
         // 3. No match — raise UnknownTelegramReceived
