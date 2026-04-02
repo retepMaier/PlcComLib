@@ -42,6 +42,10 @@ Foreground="{DynamicResource TextFillColorPrimaryBrush}"
                     Icon="{ui:SymbolIcon Symbol=PlugConnected24}"
                     TargetPageType="{x:Type pages:ConnectionsPage}"/>
                 <ui:NavigationViewItem
+                    Content="Telegrams"
+                    Icon="{ui:SymbolIcon Symbol=DocumentBulletList24}"
+                    TargetPageType="{x:Type pages:TelegramsPage}"/>
+                <ui:NavigationViewItem
                     Content="Logs"
                     Icon="{ui:SymbolIcon Symbol=TextBulletListSquare24}"
                     TargetPageType="{x:Type pages:LogPage}"/>

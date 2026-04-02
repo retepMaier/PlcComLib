@@ -8,19 +8,19 @@ namespace PlcComLib.WpfTester.Views.Pages;
 public partial class ConnectionsPage : System.Windows.Controls.Page
 {
     private readonly IConnectionManagerService _connectionManager;
-    private readonly IServiceProvider _serviceProvider;
+    private readonly ITelegramLibraryService _telegramLibrary;
 
-    public ConnectionsPage(ConnectionsPageViewModel viewModel, IConnectionManagerService connectionManager, IServiceProvider serviceProvider)
+    public ConnectionsPage(ConnectionsPageViewModel viewModel, IConnectionManagerService connectionManager, ITelegramLibraryService telegramLibrary)
     {
         DataContext = viewModel;
         _connectionManager = connectionManager;
-        _serviceProvider = serviceProvider;
+        _telegramLibrary = telegramLibrary;
         InitializeComponent();
     }
 
     private async void OnAddConnectionClick(object sender, System.Windows.RoutedEventArgs e)
     {
-        var dialog = new AddConnectionDialog();
+        var dialog = new AddConnectionDialog(_telegramLibrary);
         dialog.Owner = System.Windows.Application.Current.MainWindow;
         if (dialog.ShowDialog() == true && dialog.ResultSettings is not null)
         {

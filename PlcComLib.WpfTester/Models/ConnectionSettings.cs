@@ -42,6 +42,25 @@ public sealed class TelegramDefinitionModel
         }
         return def;
     }
+
+    public TelegramDefinitionModel DeepCopy()
+    {
+        return new TelegramDefinitionModel
+        {
+            Id = Id,
+            Name = Name,
+            MessageId = MessageId,
+            MessageIdByteOffset = MessageIdByteOffset,
+            MessageIdDataType = MessageIdDataType,
+            Fields = Fields.Select(f => new TelegramFieldDefinition
+            {
+                Name = f.Name,
+                DataType = f.DataType,
+                MaxStringLength = f.MaxStringLength,
+                RawByteCount = f.RawByteCount,
+            }).ToList(),
+        };
+    }
 }
 
 public sealed class ConnectionSettings
