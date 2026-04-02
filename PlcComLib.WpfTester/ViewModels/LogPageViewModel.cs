@@ -6,20 +6,13 @@ using PlcComLib.WpfTester.Services;
 
 namespace PlcComLib.WpfTester.ViewModels;
 
-public sealed partial class LogPageViewModel : ObservableObject
+public sealed partial class LogPageViewModel(ILogService logService) : ObservableObject
 {
-    private readonly ILogService _logService;
-
-    public ObservableCollection<LogEntry> Entries => _logService.Entries;
+    public ObservableCollection<LogEntry> Entries => logService.Entries;
 
     [ObservableProperty]
-    private bool _autoScroll = true;
-
-    public LogPageViewModel(ILogService logService)
-    {
-        _logService = logService;
-    }
+    public partial bool AutoScroll { get; set; } = true;
 
     [RelayCommand]
-    private void Clear() => _logService.Clear();
+    private void Clear() => logService.Clear();
 }

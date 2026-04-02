@@ -13,10 +13,8 @@ using PlcComLib.WpfTester.Services;
 
 namespace PlcComLib.WpfTester.ViewModels;
 
-public sealed partial class ConnectionItemViewModel : ObservableObject, IAsyncDisposable
+public sealed partial class ConnectionItemViewModel(ConnectionSettings settings, ILogService logService, ILogger logger) : ObservableObject, IAsyncDisposable
 {
-    private readonly ILogService _logService;
-    private readonly ILogger _logger;
     private IAsyncDisposable? _connection;
 
     // Abstracted event accessors stored at build time
@@ -26,22 +24,16 @@ public sealed partial class ConnectionItemViewModel : ObservableObject, IAsyncDi
     private Func<Task>? _stopAction;
     private Func<Telegram, Task>? _sendAction;
 
-    [ObservableProperty]
-    private bool _isConnected;
+    [ObservableProperty]    public partial bool IsConnected { get; set; }
 
-    [ObservableProperty]
-    private string _statusText = "Stopped";
+    [ObservableProperty]    public partial string StatusText { get; set; } = "Stopped";
 
-    [ObservableProperty]
-    private bool _isBusy;
+    [ObservableProperty]    public partial bool IsBusy { get; set; }
 
-    [ObservableProperty]
-    private string _sendHex = string.Empty;
+    [ObservableProperty]    public partial string SendHex { get; set; } = string.Empty;
 
-    [ObservableProperty]
-    private TelegramDefinitionModel? _selectedTelegram;
-
-    public ConnectionSettings Settings { get; }
+    [ObservableProperty]    public partial TelegramDefinitionModel? SelectedTelegram { get; set; }
+    public ConnectionSettings Settings { get; } = settings;
     public string DisplayName => string.IsNullOrWhiteSpace(Settings.Name)
         ? $"{Settings.Type} {Settings.Host}:{Settings.Port}"
         : Settings.Name;
@@ -49,13 +41,6 @@ public sealed partial class ConnectionItemViewModel : ObservableObject, IAsyncDi
     public string HostPort => $"{Settings.Host}:{Settings.Port}";
 
     public ObservableCollection<MessageEntry> Messages { get; } = [];
-
-    public ConnectionItemViewModel(ConnectionSettings settings, ILogService logService, ILogger logger)
-    {
-        Settings = settings;
-        _logService = logService;
-        _logger = logger;
-    }
 
     [RelayCommand]
     public async Task StartAsync()
@@ -75,7 +60,7 @@ public sealed partial class ConnectionItemViewModel : ObservableObject, IAsyncDi
         }
         catch (Exception ex)
         {
-            _logService.Log(Models.LogLevel.Error, DisplayName, $"Start failed: {ex.Message}");
+            logService.Log(Models.LogLevel.Error, DisplayName, $"Start failed: {ex.Message}");
             StatusText = "Error";
         }
         finally
@@ -91,7 +76,7 @@ public sealed partial class ConnectionItemViewModel : ObservableObject, IAsyncDi
             try { await _stopAction(); }
             catch (Exception ex)
             {
-                _logService.Log(Models.LogLevel.Warning, DisplayName, $"Stop error: {ex.Message}");
+                logService.Log(Models.LogLevel.Warning, DisplayName, $"Stop error: {ex.Message}");
             }
         }
         _unsubscribeEvents?.Invoke();
@@ -120,7 +105,7 @@ public sealed partial class ConnectionItemViewModel : ObservableObject, IAsyncDi
         }
         catch (Exception ex)
         {
-            _logService.Log(Models.LogLevel.Error, DisplayName, $"Send failed: {ex.Message}");
+            logService.Log(Models.LogLevel.Error, DisplayName, $"Send failed: {ex.Message}");
         }
     }
 
@@ -147,7 +132,7 @@ public sealed partial class ConnectionItemViewModel : ObservableObject, IAsyncDi
         }
         catch (Exception ex)
         {
-            _logService.Log(Models.LogLevel.Error, DisplayName, $"Send raw failed: {ex.Message}");
+            logService.Log(Models.LogLevel.Error, DisplayName, $"Send raw failed: {ex.Message}");
         }
     }
 
@@ -331,7 +316,7 @@ public sealed partial class ConnectionItemViewModel : ObservableObject, IAsyncDi
             StatusText = e.IsConnected
                 ? (Settings.Type is ConnectionType.TcpServer or ConnectionType.UdpServer ? "Listening/Connected" : "Connected")
                 : "Disconnected";
-            _logService.Log(
+            logService.Log(
                 e.IsConnected ? Models.LogLevel.Info : Models.LogLevel.Warning,
                 DisplayName,
                 e.IsConnected ? "Connected" : $"Disconnected: {e.Reason}");
@@ -385,7 +370,7 @@ public sealed partial class ConnectionItemViewModel : ObservableObject, IAsyncDi
             TelegramName = "(unknown)",
         };
         AddMessage(entry);
-        _logService.Log(Models.LogLevel.Warning, DisplayName, $"Unknown telegram received: {entry.HexDisplay}");
+        logService.Log(Models.LogLevel.Warning, DisplayName, $"Unknown telegram received: {entry.HexDisplay}");
     }
 
     private void AddMessage(MessageEntry entry)

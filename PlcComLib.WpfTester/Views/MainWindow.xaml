@@ -3,7 +3,9 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
-    xmlns:pages="clr-namespace:PlcComLib.WpfTester.Views.Pages"
+    xmlns:pages="clr-namespace:PlcComLib.WpfTester.Views.Pages" 
+    xmlns:viewmodels="clr-namespace:PlcComLib.WpfTester.ViewModels" 
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"    
     Title="{Binding Title}"
     Width="1200"
     Height="800"
@@ -41,6 +43,10 @@ Foreground="{DynamicResource TextFillColorPrimaryBrush}"
                     Content="Connections"
                     Icon="{ui:SymbolIcon Symbol=PlugConnected24}"
                     TargetPageType="{x:Type pages:ConnectionsPage}"/>
+                <ui:NavigationViewItem
+                    Content="Telegrams"
+                    Icon="{ui:SymbolIcon Symbol=DocumentBulletList24}"
+                    TargetPageType="{x:Type pages:TelegramsPage}"/>
                 <ui:NavigationViewItem
                     Content="Logs"
                     Icon="{ui:SymbolIcon Symbol=TextBulletListSquare24}"

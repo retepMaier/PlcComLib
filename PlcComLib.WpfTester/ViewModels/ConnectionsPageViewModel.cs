@@ -7,20 +7,13 @@ using Wpf.Ui.Controls;
 
 namespace PlcComLib.WpfTester.ViewModels;
 
-public sealed partial class ConnectionsPageViewModel : ObservableObject
+public sealed partial class ConnectionsPageViewModel(IConnectionManagerService connectionManager) : ObservableObject
 {
-    private readonly IConnectionManagerService _connectionManager;
-
-    public ObservableCollection<ConnectionItemViewModel> Connections => _connectionManager.Connections;
-
-    public ConnectionsPageViewModel(IConnectionManagerService connectionManager)
-    {
-        _connectionManager = connectionManager;
-    }
+    public ObservableCollection<ConnectionItemViewModel> Connections => connectionManager.Connections;
 
     [RelayCommand]
     private async Task RemoveConnectionAsync(ConnectionItemViewModel vm)
     {
-        await _connectionManager.RemoveConnectionAsync(vm);
+        await connectionManager.RemoveConnectionAsync(vm);
     }
 }
