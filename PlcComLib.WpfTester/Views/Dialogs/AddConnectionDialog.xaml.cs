@@ -1,4 +1,5 @@
 using PlcComLib.WpfTester.Models;
+using PlcComLib.WpfTester.Services;
 using PlcComLib.WpfTester.ViewModels;
 
 namespace PlcComLib.WpfTester.Views.Dialogs;
@@ -8,9 +9,9 @@ public partial class AddConnectionDialog : System.Windows.Window
     public ConnectionSettings? ResultSettings { get; private set; }
     private readonly AddConnectionDialogViewModel _viewModel;
 
-    public AddConnectionDialog()
+    public AddConnectionDialog(ITelegramLibraryService telegramLibrary)
     {
-        _viewModel = new AddConnectionDialogViewModel();
+        _viewModel = new AddConnectionDialogViewModel(telegramLibrary);
         DataContext = _viewModel;
         InitializeComponent();
     }

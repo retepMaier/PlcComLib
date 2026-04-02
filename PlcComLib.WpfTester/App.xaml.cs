@@ -25,16 +25,19 @@ public partial class App : Application
                 // Core services
                 services.AddSingleton<ILogService, LogService>();
                 services.AddSingleton<IConnectionManagerService, ConnectionManagerService>();
+                services.AddSingleton<ITelegramLibraryService, TelegramLibraryService>();
                 services.AddSingleton<INavigationViewPageProvider, NavigationViewPageProvider>();
 
                 // ViewModels
                 services.AddSingleton<MainWindowViewModel>();
                 services.AddSingleton<ConnectionsPageViewModel>();
                 services.AddSingleton<LogPageViewModel>();
+                services.AddSingleton<TelegramsPageViewModel>();
 
                 // Pages
                 services.AddSingleton<ConnectionsPage>();
                 services.AddSingleton<LogPage>();
+                services.AddSingleton<TelegramsPage>();
 
                 // Main window
                 services.AddSingleton<MainWindow>();
