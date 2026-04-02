@@ -15,13 +15,12 @@ namespace PlcComLib.Tcp;
 public sealed class TcpPlcClient(
     ConnectionConfiguration config,
     TelegramRegistry registry,
-    IMessageFramer? framer = null,
     ILogger<TcpPlcClient>? logger = null,
     ByteOrder byteOrder = ByteOrder.BigEndian) : IPlcConnection
 {
     private readonly ConnectionConfiguration _config = config ?? throw new ArgumentNullException(nameof(config));
     private readonly TelegramRegistry _registry = registry ?? throw new ArgumentNullException(nameof(registry));
-    private readonly IMessageFramer _framer = framer ?? new TelegramIdFramer(registry.Definitions, byteOrder);
+    private readonly IMessageFramer _framer =  new TelegramIdFramer(registry.Definitions, byteOrder);
 
     // Pre-built dispatch lookup tables (constructed once, used on every received telegram).
     // _idGroups: for each unique (offset, type) combination used as a MessageId discriminator,

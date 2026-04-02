@@ -18,7 +18,12 @@ public sealed class TelegramDefinitionModel
     public string Name { get; set; } = string.Empty;
     public long MessageId { get; set; } = 0;
     public int MessageIdByteOffset { get; set; } = 0;
+
+    public long MessageLength { get; set; } = 0;
+    public int MessageLengthByteOffset { get; set; } = 2;
     public S7DataType MessageIdDataType { get; set; } = S7DataType.Word;
+
+    public S7DataType MessageLengthDataType { get; set; } = S7DataType.Int;
     public List<TelegramFieldDefinition> Fields { get; set; } = [];
 
     public TelegramDefinition ToTelegramDefinition()
@@ -30,6 +35,8 @@ public sealed class TelegramDefinitionModel
             MessageId = MessageId,
             MessageIdByteOffset = MessageIdByteOffset,
             MessageIdDataType = MessageIdDataType,
+            LengthByteOffset = MessageLengthByteOffset,
+            LengthDataType = MessageLengthDataType,
         };
         foreach (var f in Fields)
         {
@@ -53,6 +60,9 @@ public sealed class TelegramDefinitionModel
             MessageId = MessageId,
             MessageIdByteOffset = MessageIdByteOffset,
             MessageIdDataType = MessageIdDataType,
+            MessageLengthByteOffset = MessageLengthByteOffset,
+            MessageLengthDataType = MessageLengthDataType,
+
             Fields = Fields.Select(f => new TelegramFieldDefinition
             {
                 Name = f.Name,

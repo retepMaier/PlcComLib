@@ -165,8 +165,7 @@ public sealed class TcpPlcClientBuilder
     /// </typeparam>
     /// <param name="length">Expected total length in bytes. Any numeric value is accepted.</param>
     /// <param name="byteOffset">Zero-based byte offset in the payload where the length field is located.</param>
-    public TcpPlcClientBuilder WithLength<TType>(long length, int byteOffset)
-        where TType : IS7FramingType
+    public TcpPlcClientBuilder WithLength<TType>(long length, int byteOffset) where TType : IS7FramingType
     {
         if (_lastRegisteredDef is not null)
         {
@@ -193,11 +192,11 @@ public sealed class TcpPlcClientBuilder
             ReceiveBufferSize = _receiveBufferSize,
             SendBufferSize = _sendBufferSize,
         };
-        // Default framer: TelegramIdFramer — reads the first 2 bytes as TelegramId and
-        // uses the registered wire size (from WithLength / field definitions) for framing.
-        var framer = _framer ?? (_useLengthFramer
-            ? new LengthFramer(_byteOrder)
-            : (IMessageFramer)new TelegramIdFramer(_registry.Definitions, _byteOrder));
-        return new TcpPlcClient(config, _registry, framer, _logger, _byteOrder);
+        //// Default framer: TelegramIdFramer — reads the first 2 bytes as TelegramId and
+        //// uses the registered wire size (from WithLength / field definitions) for framing.
+        //var framer = _framer ?? (_useLengthFramer
+        //    ? new LengthFramer(_byteOrder)
+        //    : (IMessageFramer)new TelegramIdFramer(_registry.Definitions, _byteOrder));
+        return new TcpPlcClient(config, _registry, _logger, _byteOrder);
     }
 }

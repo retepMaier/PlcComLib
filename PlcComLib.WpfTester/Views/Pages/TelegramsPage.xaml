@@ -85,11 +85,11 @@
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="12"/>
-                                <ColumnDefinition Width="80"/>
+                                <ColumnDefinition Width="120"/>
                                 <ColumnDefinition Width="12"/>
-                                <ColumnDefinition Width="60"/>
+                                <ColumnDefinition Width="120"/>
                                 <ColumnDefinition Width="12"/>
-                                <ColumnDefinition Width="90"/>
+                                <ColumnDefinition Width="120"/>
                             </Grid.ColumnDefinitions>
                             <StackPanel Grid.Column="0">
                                 <TextBlock Text="Name" Style="{StaticResource FieldLabel}"/>

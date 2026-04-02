@@ -24,15 +24,15 @@ public sealed partial class ConnectionItemViewModel(ConnectionSettings settings,
     private Func<Task>? _stopAction;
     private Func<Telegram, Task>? _sendAction;
 
-    [ObservableProperty]    public partial bool IsConnected { get; set; }
+    [ObservableProperty] public partial bool IsConnected { get; set; }
 
-    [ObservableProperty]    public partial string StatusText { get; set; } = "Stopped";
+    [ObservableProperty] public partial string StatusText { get; set; } = "Stopped";
 
-    [ObservableProperty]    public partial bool IsBusy { get; set; }
+    [ObservableProperty] public partial bool IsBusy { get; set; }
 
-    [ObservableProperty]    public partial string SendHex { get; set; } = string.Empty;
+    [ObservableProperty] public partial string SendHex { get; set; } = string.Empty;
 
-    [ObservableProperty]    public partial TelegramDefinitionModel? SelectedTelegram { get; set; }
+    [ObservableProperty] public partial TelegramDefinitionModel? SelectedTelegram { get; set; }
     public ConnectionSettings Settings { get; } = settings;
     public string DisplayName => string.IsNullOrWhiteSpace(Settings.Name)
         ? $"{Settings.Type} {Settings.Host}:{Settings.Port}"
@@ -207,8 +207,14 @@ public sealed partial class ConnectionItemViewModel(ConnectionSettings settings,
             .ConnectTo(Settings.Host, Settings.Port)
             .WithByteOrder(Settings.ByteOrder)
             .WithTimeout(TimeSpan.FromSeconds(Settings.TimeoutSeconds))
-            .WithReconnectInterval(TimeSpan.FromSeconds(Settings.ReconnectIntervalSeconds))
+            .WithReconnectInterval(TimeSpan.FromSeconds(Settings.ReconnectIntervalSeconds))            
             .WithNoDelay(Settings.NoDelay);
+
+        
+       
+
+
+
 
         if (Settings.ReceiveBufferSize > 0) builder.WithReceiveBufferSize(Settings.ReceiveBufferSize);
         if (Settings.SendBufferSize > 0) builder.WithSendBufferSize(Settings.SendBufferSize);

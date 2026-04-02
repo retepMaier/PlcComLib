@@ -192,9 +192,9 @@ public sealed class TcpPlcServerBuilder
             ReceiveBufferSize = _receiveBufferSize,
             SendBufferSize = _sendBufferSize,
         };
-        var framer = _framer ?? (_useLengthFramer
-            ? new LengthFramer(_byteOrder)
-            : (IMessageFramer)new TelegramIdFramer(_registry.Definitions, _byteOrder));
-        return new TcpPlcServer(config, _registry, framer, _logger, _byteOrder);
+        //var framer = _framer ?? (_useLengthFramer
+        //    ? new LengthFramer(_byteOrder)
+        //    : (IMessageFramer)new TelegramIdFramer(_registry.Definitions, _byteOrder));
+        return new TcpPlcServer(config, _registry, _logger, _byteOrder);
     }
 }

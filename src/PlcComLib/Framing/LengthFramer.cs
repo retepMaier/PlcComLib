@@ -22,36 +22,36 @@ namespace PlcComLib.Framing;
 /// Byte order used to read the 2-byte TotalLength from the stream. Must match the
 /// byte order configured on the connection.
 /// </param>
-public sealed class LengthFramer(ByteOrder byteOrder = ByteOrder.BigEndian) : IMessageFramer
-{
+//public sealed class LengthFramer(ByteOrder byteOrder = ByteOrder.BigEndian) : IMessageFramer
+//{
 
-    /// <summary>
-    /// Returns the payload as-is.
-    /// Both the TelegramId and TotalLength are already the first four bytes of every
-    /// serialised telegram, so no additional framing header is required.
-    /// </summary>
-    public byte[] Frame(ReadOnlySpan<byte> payload) => payload.ToArray();
+//    /// <summary>
+//    /// Returns the payload as-is.
+//    /// Both the TelegramId and TotalLength are already the first four bytes of every
+//    /// serialised telegram, so no additional framing header is required.
+//    /// </summary>
+//    public byte[] Frame(ReadOnlySpan<byte> payload) => payload.ToArray();
 
-    /// <summary>
-    /// Attempts to extract a complete frame from <paramref name="buffer"/>.
-    /// Reads bytes 2–3 as a <c>TotalLength</c> (UInt16) and waits until that many bytes are available.
-    /// </summary>
-    public bool TryExtract(ReadOnlySpan<byte> buffer, out ReadOnlySpan<byte> message, out int consumed)
-    {
-        message  = default;
-        consumed = 0;
+//    /// <summary>
+//    /// Attempts to extract a complete frame from <paramref name="buffer"/>.
+//    /// Reads bytes 2–3 as a <c>TotalLength</c> (UInt16) and waits until that many bytes are available.
+//    /// </summary>
+//    public bool TryExtract(ReadOnlySpan<byte> buffer, out ReadOnlySpan<byte> message, out int consumed)
+//    {
+//        message  = default;
+//        consumed = 0;
 
-        if (buffer.Length < 4) return false; // Need TelegramId (2) + TotalLength (2)
+//        if (buffer.Length < 4) return false; // Need TelegramId (2) + TotalLength (2)
 
-        int totalLength = byteOrder == ByteOrder.LittleEndian
-            ? BinaryPrimitives.ReadUInt16LittleEndian(buffer.Slice(2))
-            : BinaryPrimitives.ReadUInt16BigEndian(buffer.Slice(2));
+//        int totalLength = byteOrder == ByteOrder.LittleEndian
+//            ? BinaryPrimitives.ReadUInt16LittleEndian(buffer.Slice(2))
+//            : BinaryPrimitives.ReadUInt16BigEndian(buffer.Slice(2));
 
-        if (totalLength < 4) return false; // Sanity check: must be at least the header
-        if (buffer.Length < totalLength) return false;
+//        if (totalLength < 4) return false; // Sanity check: must be at least the header
+//        if (buffer.Length < totalLength) return false;
 
-        message  = buffer.Slice(0, totalLength);
-        consumed = totalLength;
-        return true;
-    }
-}
+//        message  = buffer.Slice(0, totalLength);
+//        consumed = totalLength;
+//        return true;
+//    }
+//}
