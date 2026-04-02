@@ -8,11 +8,21 @@ Console.WriteLine("Hello, World!");
 
 var client = new TcpPlcClientBuilder()
     .ConnectTo("10.80.1.196", 4000)
-    .WithByteOrder(ByteOrder.BigEndian) 
+    .WithNoDelay(true)
+    .WithByteOrder(ByteOrder.BigEndian)
     .RegisterTelegram<MachineStatus>()
         .WithMessageId<S7Int>(id: 1, byteOffset: 0)
-        .WithLength<S7Int>    (length: 12, byteOffset: 2)
+        .WithLength<S7Int>(length: 12, byteOffset: 2)
     .Build();
+
+
+
+
+
+
+
+
+
 
 // Subscribe to incoming typed telegrams
 client.Subscribe<MachineStatus>(msg =>
@@ -34,7 +44,7 @@ client.UnknownTelegramReceived += (sender, raw) =>
 
 client.TelegramReceived += (sender, raw) =>
 {
-    
+
 };
 
 

@@ -26,9 +26,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\PlcComLib\PlcComLib.csproj" />
-    <ProjectReference Include="..\..\src\PlcComLib.SourceGenerator\PlcComLib.SourceGenerator.csproj"
-                      OutputItemType="Analyzer"
-                      ReferenceOutputAssembly="false" />
   </ItemGroup>
 
 </Project>
