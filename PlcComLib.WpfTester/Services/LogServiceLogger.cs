@@ -1,5 +1,4 @@
 using Microsoft.Extensions.Logging;
-using PlcComLib.WpfTester.Services;
 
 namespace PlcComLib.WpfTester.Services;
 

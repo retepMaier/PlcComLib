@@ -288,7 +288,7 @@
                                                                         Opacity="0.5">
                                                                         <TextBlock.Style>
                                                                             <Style TargetType="TextBlock">
-                                                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                                                <Setter Property="Visibility" Value="Visible"/>
                                                                                 <Style.Triggers>
                                                                                     <DataTrigger Binding="{Binding TelegramName}" Value="{x:Null}">
                                                                                         <Setter Property="Visibility" Value="Collapsed"/>
