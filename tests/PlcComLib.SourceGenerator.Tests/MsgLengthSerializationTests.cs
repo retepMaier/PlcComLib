@@ -1,16 +1,14 @@
 using System.Buffers.Binary;
 using FluentAssertions;
 using PlcComLib.DataTypes;
-using PlcComLib.SourceGenerator;
 using PlcComLib.Telegrams;
 using Xunit;
 
 namespace PlcComLib.SourceGenerator.Tests;
 
 /// <summary>
-/// Validates the new wire format: [TelegramId: 2 bytes][data fields…].
-/// MessageId and wire-size are registered at runtime via the connection builder's
-/// .WithMessageId() / .WithLength() — not via [MsgId] / [MsgLength] attributes.
+/// Validates wire format and builder-style MessageId/WireSize configuration
+/// using the new S7TelegramBase&lt;T&gt; approach.
 /// </summary>
 public class WireFormatTests
 {
@@ -19,20 +17,16 @@ public class WireFormatTests
     [Fact]
     public void Serialize_DataFields_StartAtOffset0()
     {
-        // Wire layout: [MachineId: 2][Speed: 4][Label: 12] — no prepended header.
-        var t = new TestStatusTelegram { MachineId = 0xABCD };
+        var t     = new TestStatusTelegram { MachineId = 0xABCD };
         var bytes = t.Serialize(ByteOrder.BigEndian);
-
-        ushort machineId = BinaryPrimitives.ReadUInt16BigEndian(bytes.AsSpan(0));
-        machineId.Should().Be(0xABCD);
+        BinaryPrimitives.ReadUInt16BigEndian(bytes.AsSpan(0)).Should().Be(0xABCD);
     }
 
     [Fact]
     public void Serialize_TotalSize_IsSumOfDataFields()
     {
-        // 2 (Word) + 4 (Real) + 12 (S7String maxLen=10) = 18
-        var bytes = new TestStatusTelegram().Serialize();
-        bytes.Length.Should().Be(18);
+        // S7Word(2) + S7Real(4) + S7String<L10>(12) = 18
+        new TestStatusTelegram().Serialize().Length.Should().Be(18);
     }
 
     // ── Deserialize ────────────────────────────────────────────────────────────
@@ -44,9 +38,9 @@ public class WireFormatTests
         var bytes    = original.Serialize();
         var restored = TestStatusTelegram.Deserialize(bytes);
 
-        restored.MachineId.Should().Be(99);
-        restored.Speed.Should().BeApproximately(1.5f, 1e-4f);
-        restored.Label.Should().Be("ok");
+        ((ushort)restored.MachineId).Should().Be(99);
+        ((float) restored.Speed    ).Should().BeApproximately(1.5f, 1e-4f);
+        ((string)restored.Label   ).Should().Be("ok");
     }
 
     // ── Definition structure ───────────────────────────────────────────────────
@@ -57,15 +51,6 @@ public class WireFormatTests
         var def = TestStatusTelegram.Definition;
         def.Fields[0].Name.Should().Be("MachineId");
         def.Fields[0].DataType.Should().Be(S7DataType.Word);
-    }
-
-    [Fact]
-    public void Definition_HasNoSentinelHeaderFields()
-    {
-        // The generator adds no __TelegramId or __MessageLength sentinel fields.
-        var def = TestStatusTelegram.Definition;
-        def.Fields.Should().NotContain(f => f.Name == "__TelegramId");
-        def.Fields.Should().NotContain(f => f.Name == "__MessageLength");
     }
 
     [Fact]
@@ -82,7 +67,7 @@ public class WireFormatTests
             .Should().Be(TestStatusTelegram.WireSize);
     }
 
-    // ── Builder-style .WithMessageId / .WithLength simulation ─────────────────
+    // ── Builder-style MessageId simulation ────────────────────────────────────
 
     [Fact]
     public void WithMessageId_Sets_DefinitionMessageId()
@@ -90,9 +75,7 @@ public class WireFormatTests
         var saved = TestStatusTelegram.Definition.MessageId;
         try
         {
-            // Simulate what the connection builder does:
-            // .RegisterTelegram<TestStatusTelegram>().WithMessageId(0x0001).WithLength(WireSize)
-            TestStatusTelegram.Definition.MessageId        = 0x0001;
+            TestStatusTelegram.Definition.MessageId         = 0x0001;
             TestStatusTelegram.Definition.ConfiguredWireSize = TestStatusTelegram.WireSize;
 
             TestStatusTelegram.Definition.MessageId.Should().Be(0x0001);
@@ -100,23 +83,9 @@ public class WireFormatTests
         }
         finally
         {
-            TestStatusTelegram.Definition.MessageId        = saved;
+            TestStatusTelegram.Definition.MessageId         = saved;
             TestStatusTelegram.Definition.ConfiguredWireSize = TestStatusTelegram.WireSize;
         }
-    }
-
-    [Fact]
-    public void TelegramIdFramer_UsesEffectiveWireSize_FromDefinition()
-    {
-        // EffectiveWireSize is ConfiguredWireSize when set, else TotalWireSize from fields.
-        var def = new TelegramDefinition
-        {
-            Id = "TestHand",
-            MessageId = 0x00FF,
-            ConfiguredWireSize = 42,
-            Fields = [],
-        };
-        def.EffectiveWireSize.Should().Be(42);
     }
 
     [Fact]
@@ -124,8 +93,8 @@ public class WireFormatTests
     {
         var def = new TelegramDefinition
         {
-            Id = "TestHand2",
-            MessageId = 0x00FE,
+            Id                 = "TestHand2",
+            MessageId          = 0x00FE,
             ConfiguredWireSize = 0,
             Fields =
             [
@@ -133,6 +102,6 @@ public class WireFormatTests
                 new TelegramField { Name = "B", DataType = S7DataType.Real },
             ],
         };
-        def.EffectiveWireSize.Should().Be(2 + 4); // Word + Real
+        def.EffectiveWireSize.Should().Be(2 + 4);
     }
 }

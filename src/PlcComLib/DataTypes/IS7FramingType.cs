@@ -1,14 +1,16 @@
 namespace PlcComLib.DataTypes;
 
 /// <summary>
-/// Marker interface for S7 data types used in framing configuration.
-/// Implement via the concrete structs (<see cref="S7Word"/>, <see cref="S7Int"/>, etc.)
-/// and pass as a type argument to
-/// <c>.WithMessageId&lt;S7Word&gt;(id, byteOffset)</c> or
-/// <c>.WithLength&lt;S7Int&gt;(length, byteOffset)</c> on the connection builder.
+/// Marker interface implemented by every S7 value struct (<see cref="S7Word"/>, <see cref="S7Int"/>, …).
+/// Use as a type argument to <c>.WithMessageId&lt;S7Word&gt;</c> / <c>.WithLength&lt;S7Int&gt;</c>
+/// on connection builders, or declare telegram properties with the concrete struct types so that
+/// <see cref="PlcComLib.Telegrams.S7TelegramBase{TSelf}"/> can serialise them automatically.
 /// </summary>
 public interface IS7FramingType
 {
-    /// <summary>The S7 data type represented by this framing marker.</summary>
+    /// <summary>The S7 data type represented by this struct.</summary>
     static abstract S7DataType DataType { get; }
+
+    /// <summary>Number of bytes this type occupies on the wire.</summary>
+    static abstract int WireSize { get; }
 }

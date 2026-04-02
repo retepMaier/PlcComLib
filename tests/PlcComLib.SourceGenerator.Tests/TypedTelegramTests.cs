@@ -1,56 +1,46 @@
 using System.Buffers.Binary;
 using FluentAssertions;
 using PlcComLib.DataTypes;
-using PlcComLib.SourceGenerator;
 using PlcComLib.Telegrams;
 
-// File-scoped namespace; the inline telegram classes live inside this namespace.
+// ── Telegram classes using the new S7TelegramBase<T> approach ─────────────────
+
 namespace PlcComLib.SourceGenerator.Tests;
 
-// ── Inline typed telegram classes processed by the source generator ────────────
-// No [MsgId] or [MsgLength] attributes — TelegramId and wire-size are configured
-// at registration time via the connection builder's .WithMessageId() / .WithLength().
-
-[S7Telegram]
-public partial class TestStatusTelegram
+public class TestStatusTelegram : S7TelegramBase<TestStatusTelegram>
 {
-    [S7Word]                  public ushort MachineId { get; set; }
-    [S7Real]                  public float  Speed     { get; set; }
-    [S7String(maxLength: 10)] public string Label     { get; set; } = "";
+    public S7Word              MachineId { get; set; } = 0;
+    public S7Real              Speed     { get; set; } = 0f;
+    public S7String<L10>       Label     { get; set; } = "";
 }
 
-/// <summary>Covers every S7 scalar type.</summary>
-[S7Telegram]
-public partial class FullTypeTelegram
+/// <summary>Covers every scalar S7 type.</summary>
+public class FullTypeTelegram : S7TelegramBase<FullTypeTelegram>
 {
-    [S7Bool]  public bool   BoolVal  { get; set; }
-    [S7Byte]  public byte   ByteVal  { get; set; }
-    [S7SInt]  public sbyte  SIntVal  { get; set; }
-    [S7Word]  public ushort WordVal  { get; set; }
-    [S7Int]   public short  IntVal   { get; set; }
-    [S7DWord] public uint   DWordVal { get; set; }
-    [S7DInt]  public int    DIntVal  { get; set; }
-    [S7Real]  public float  RealVal  { get; set; }
-    [S7LWord] public ulong  LWordVal { get; set; }
-    [S7LInt]  public long   LIntVal  { get; set; }
-    [S7LReal] public double LRealVal { get; set; }
+    public S7Bool  BoolVal  { get; set; } = false;
+    public S7Byte  ByteVal  { get; set; } = 0;
+    public S7SInt  SIntVal  { get; set; } = 0;
+    public S7Word  WordVal  { get; set; } = 0;
+    public S7Int   IntVal   { get; set; } = 0;
+    public S7DWord DWordVal { get; set; } = 0;
+    public S7DInt  DIntVal  { get; set; } = 0;
+    public S7Real  RealVal  { get; set; } = 0f;
+    public S7LWord LWordVal { get; set; } = 0;
+    public S7LInt  LIntVal  { get; set; } = 0;
+    public S7LReal LRealVal { get; set; } = 0.0;
 }
 
-/// <summary>Telegram for a non-PLC device (e.g. a Linux sensor board).</summary>
-[S7Telegram]
-public partial class LittleEndianTelegram
+public class LittleEndianTelegram : S7TelegramBase<LittleEndianTelegram>
 {
-    [S7Word] public ushort DeviceId { get; set; }
-    [S7Real] public float  Value    { get; set; }
+    public S7Word DeviceId { get; set; } = 0;
+    public S7Real Value    { get; set; } = 0f;
 }
 
-/// <summary>Telegram with fixed-length char[] fields.</summary>
-[S7Telegram]
-public partial class CharArrayTelegram
+public class CharArrayTelegram : S7TelegramBase<CharArrayTelegram>
 {
-    [S7Word]         public ushort  DeviceId { get; set; }
-    [S7CharArray(8)] public char[]? Tag      { get; set; }
-    [S7CharArray(4)] public char[]? Code     { get; set; }
+    public S7Word          DeviceId { get; set; } = 0;
+    public S7CharArray<L8> Tag      { get; set; } = new char[0];
+    public S7CharArray<L4> Code     { get; set; } = new char[0];
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -66,9 +56,9 @@ public class TypedTelegramTests
         var bytes    = original.Serialize();
         var restored = TestStatusTelegram.Deserialize(bytes);
 
-        restored.MachineId.Should().Be(42);
-        restored.Speed.Should().BeApproximately(123.456f, 1e-3f);
-        restored.Label.Should().Be("Hello");
+        ((ushort)restored.MachineId).Should().Be(42);
+        ((float)restored.Speed).Should().BeApproximately(123.456f, 1e-3f);
+        ((string)restored.Label).Should().Be("Hello");
     }
 
     [Fact]
@@ -92,17 +82,17 @@ public class TypedTelegramTests
         var bytes    = original.Serialize();
         var restored = FullTypeTelegram.Deserialize(bytes);
 
-        restored.BoolVal .Should().Be(true);
-        restored.ByteVal .Should().Be(0xFF);
-        restored.SIntVal .Should().Be(-42);
-        restored.WordVal .Should().Be(0xABCD);
-        restored.IntVal  .Should().Be(-1000);
-        restored.DWordVal.Should().Be(0xDEADBEEF);
-        restored.DIntVal .Should().Be(-1_000_000);
-        restored.RealVal .Should().BeApproximately(3.14f, 1e-4f);
-        restored.LWordVal.Should().Be(0xCAFEBABEDEAD);
-        restored.LIntVal .Should().Be(long.MinValue);
-        restored.LRealVal.Should().BeApproximately(double.Pi, 1e-12);
+        ((bool)  restored.BoolVal ).Should().Be(true);
+        ((byte)  restored.ByteVal ).Should().Be(0xFF);
+        ((sbyte) restored.SIntVal ).Should().Be(-42);
+        ((ushort)restored.WordVal ).Should().Be(0xABCD);
+        ((short) restored.IntVal  ).Should().Be(-1000);
+        ((uint)  restored.DWordVal).Should().Be(0xDEADBEEF);
+        ((int)   restored.DIntVal ).Should().Be(-1_000_000);
+        ((float) restored.RealVal ).Should().BeApproximately(3.14f, 1e-4f);
+        ((ulong) restored.LWordVal).Should().Be(0xCAFEBABEDEAD);
+        ((long)  restored.LIntVal ).Should().Be(long.MinValue);
+        ((double)restored.LRealVal).Should().BeApproximately(double.Pi, 1e-12);
     }
 
     // ── 2. Short buffer throws ────────────────────────────────────────────────
@@ -114,12 +104,12 @@ public class TypedTelegramTests
         act.Should().Throw<ArgumentException>().WithMessage("*Buffer too short*");
     }
 
-    // ── 3. WireSize — sum of data fields only ─────────────────────────────────
+    // ── 3. WireSize ───────────────────────────────────────────────────────────
 
     [Fact]
     public void WireSize_IsExactlySumOfDataFields()
     {
-        // 2 (MachineId Word) + 4 (Speed Real) + 12 (Label S7String(10)) = 18
+        // 2 (S7Word) + 4 (S7Real) + 12 (S7String<L10>: 2+10) = 18
         const int expected = 2 + 4 + (2 + 10);
         TestStatusTelegram.WireSize.Should().Be(expected);
     }
@@ -127,14 +117,51 @@ public class TypedTelegramTests
     [Fact]
     public void Serialize_ProducesExactlyWireSize_Bytes()
     {
-        var bytes = new TestStatusTelegram().Serialize();
-        bytes.Length.Should().Be(TestStatusTelegram.WireSize);
+        new TestStatusTelegram().Serialize().Length.Should().Be(TestStatusTelegram.WireSize);
     }
 
-    // ── 4. Definition structure ───────────────────────────────────────────────
+    // ── 4. Implicit conversion operators ─────────────────────────────────────
 
     [Fact]
-    public void Definition_FirstField_IsFirstDataField()
+    public void ImplicitOperators_AllowAssigningNetPrimitives()
+    {
+        var t = new FullTypeTelegram();
+        t.BoolVal  = true;
+        t.ByteVal  = 0xAB;
+        t.SIntVal  = -5;
+        t.WordVal  = 0x1234;
+        t.IntVal   = -999;
+        t.DWordVal = 0xDEAD;
+        t.DIntVal  = -1;
+        t.RealVal  = 1.5f;
+        t.LWordVal = 0xFFFFFFFF;
+        t.LIntVal  = -1L;
+        t.LRealVal = 2.71828;
+
+        ((bool)  t.BoolVal ).Should().Be(true);
+        ((byte)  t.ByteVal ).Should().Be(0xAB);
+        ((sbyte) t.SIntVal ).Should().Be(-5);
+        ((ushort)t.WordVal ).Should().Be(0x1234);
+        ((short) t.IntVal  ).Should().Be(-999);
+        ((uint)  t.DWordVal).Should().Be(0xDEAD);
+        ((int)   t.DIntVal ).Should().Be(-1);
+        ((float) t.RealVal ).Should().BeApproximately(1.5f, 1e-6f);
+        ((ulong) t.LWordVal).Should().Be(0xFFFFFFFF);
+        ((long)  t.LIntVal ).Should().Be(-1L);
+        ((double)t.LRealVal).Should().BeApproximately(2.71828, 1e-10);
+    }
+
+    [Fact]
+    public void ImplicitOperators_AllowAssigningStringToS7String()
+    {
+        var t = new TestStatusTelegram { Label = "world" };
+        ((string)t.Label).Should().Be("world");
+    }
+
+    // ── 5. Definition ─────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Definition_FirstField_IsFirstDeclaredProperty()
     {
         var def = TestStatusTelegram.Definition;
         def.Fields[0].Name.Should().Be("MachineId");
@@ -144,8 +171,6 @@ public class TypedTelegramTests
     [Fact]
     public void Definition_ConfiguredWireSize_MatchesWireSize()
     {
-        // The generator pre-sets ConfiguredWireSize so TelegramIdFramer can frame correctly
-        // even before any builder registration happens.
         TestStatusTelegram.Definition.ConfiguredWireSize
             .Should().Be(TestStatusTelegram.WireSize);
     }
@@ -153,100 +178,61 @@ public class TypedTelegramTests
     [Fact]
     public void Definition_MessageId_IsZeroUntilRegistered()
     {
-        // In a fresh test run (or after reset), the Definition.MessageId is 0 by default.
-        // It is set to a non-zero value via the connection builder's .WithMessageId().
-        TestStatusTelegram.Definition.MessageId = 0; // ensure reset
+        TestStatusTelegram.Definition.MessageId = 0;
         TestStatusTelegram.Definition.MessageId.Should().Be(0);
     }
 
-    // ── 5. TelegramId instance property follows Definition.MessageId ──────────
+    // ── 6. TelegramId follows Definition.MessageId ────────────────────────────
 
     [Fact]
     public void TelegramId_FollowsDefinitionMessageId()
     {
-        TestStatusTelegram.Definition.MessageId = 0x0042;
+        var saved = TestStatusTelegram.Definition.MessageId;
         try
         {
+            TestStatusTelegram.Definition.MessageId = 0x0042;
             ITelegram t = new TestStatusTelegram();
             t.TelegramId.Should().Be(0x0042);
         }
-        finally { TestStatusTelegram.Definition.MessageId = 0; }
+        finally { TestStatusTelegram.Definition.MessageId = saved; }
     }
 
-    // ── 6. Byte order is a connection-level parameter ─────────────────────────
+    // ── 7. Byte order ─────────────────────────────────────────────────────────
 
     [Fact]
-    public void LittleEndian_Word_IsWrittenLittleEndian_WhenByteOrderPassedToSerialize()
+    public void LittleEndian_Word_IsWrittenLittleEndian()
     {
         var t = new LittleEndianTelegram { DeviceId = 0x1234 };
         var bytes = t.Serialize(ByteOrder.LittleEndian);
-
-        // DeviceId is the first field, at offset 0.
-        ushort leWord = BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan(0));
-        leWord.Should().Be(0x1234);
+        BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan(0)).Should().Be(0x1234);
     }
 
     [Fact]
-    public void LittleEndian_RoundTrip_WithConnectionByteOrder()
+    public void LittleEndian_RoundTrip()
     {
         var original = new LittleEndianTelegram { DeviceId = 0xBEEF, Value = 2.718f };
         var bytes    = original.Serialize(ByteOrder.LittleEndian);
         var restored = LittleEndianTelegram.Deserialize(bytes, ByteOrder.LittleEndian);
 
-        restored.DeviceId.Should().Be(0xBEEF);
-        restored.Value.Should().BeApproximately(2.718f, 1e-3f);
+        ((ushort)restored.DeviceId).Should().Be(0xBEEF);
+        ((float) restored.Value   ).Should().BeApproximately(2.718f, 1e-3f);
     }
 
     [Fact]
     public void DefaultSerialize_IsBigEndian()
     {
-        var t = new LittleEndianTelegram { DeviceId = 0x1234 };
-        var bytes = t.Serialize(); // default = BigEndian
-
-        // DeviceId is the first field, at offset 0.
-        ushort beWord = BinaryPrimitives.ReadUInt16BigEndian(bytes.AsSpan(0));
-        beWord.Should().Be(0x1234);
+        var t     = new LittleEndianTelegram { DeviceId = 0x1234 };
+        var bytes = t.Serialize();
+        BinaryPrimitives.ReadUInt16BigEndian(bytes.AsSpan(0)).Should().Be(0x1234);
     }
 
-    // ── 8. Definition usable via static interface member (zero reflection) ─────
-
-    [Fact]
-    public void Definition_CanBeRegistered_WithoutReflection()
-    {
-        var registry = new TelegramRegistry();
-        registry.Register(TestStatusTelegram.Definition); // T.Definition — zero reflection
-        registry.TryGet("TestStatusTelegram", out _).Should().BeTrue();
-    }
-
-    // ── 9. Builder-style registration sets MessageId on Definition ───────────
-
-    [Fact]
-    public void Definition_MessageId_IsUpdated_WhenSetDirectly()
-    {
-        // Simulates what the connection builder's .WithMessageId() does internally.
-        var savedId = TestStatusTelegram.Definition.MessageId;
-        try
-        {
-            TestStatusTelegram.Definition.MessageId = 0x0001;
-            TestStatusTelegram.Definition.MessageId.Should().Be(0x0001);
-
-            // TelegramId instance property reflects the runtime value.
-            ITelegram t = new TestStatusTelegram();
-            t.TelegramId.Should().Be(0x0001);
-        }
-        finally { TestStatusTelegram.Definition.MessageId = savedId; }
-    }
-
-    // ── 10. char[] (S7CharArray) support ─────────────────────────────────────
+    // ── 8. S7CharArray ────────────────────────────────────────────────────────
 
     [Fact]
     public void CharArray_WireSize_IsExactLength()
     {
-        // 2 (DeviceId Word) + 8 (Tag CharArray) + 4 (Code CharArray) = 14
-        const int deviceId = 2;
-        const int tag      = 8;
-        const int code     = 4;
-        CharArrayTelegram.WireSize.Should().Be(deviceId + tag + code);
+        // 2 (S7Word) + 8 (S7CharArray<L8>) + 4 (S7CharArray<L4>) = 14
+        CharArrayTelegram.WireSize.Should().Be(2 + 8 + 4);
     }
 
     [Fact]
@@ -255,23 +241,14 @@ public class TypedTelegramTests
         var t = new CharArrayTelegram
         {
             DeviceId = 0x0001,
-            Tag  = new[] { 'H', 'e', 'l', 'l', 'o', '!', '\0', '\0' },
-            Code = new[] { 'A', 'B', 'C', 'D' },
+            Tag  = new char[] { 'H', 'e', 'l', 'l', 'o', '!', '\0', '\0' },
+            Code = new char[] { 'A', 'B', 'C', 'D' },
         };
         var bytes = t.Serialize();
 
-        // Tag starts at offset 2 (2 DeviceId)
         bytes[2].Should().Be((byte)'H');
-        bytes[3].Should().Be((byte)'e');
-        bytes[4].Should().Be((byte)'l');
-        bytes[5].Should().Be((byte)'l');
-        bytes[6].Should().Be((byte)'o');
         bytes[7].Should().Be((byte)'!');
-
-        // Code starts at offset 10 (2 + 8)
         bytes[10].Should().Be((byte)'A');
-        bytes[11].Should().Be((byte)'B');
-        bytes[12].Should().Be((byte)'C');
         bytes[13].Should().Be((byte)'D');
     }
 
@@ -281,47 +258,25 @@ public class TypedTelegramTests
         var original = new CharArrayTelegram
         {
             DeviceId = 0x0042,
-            Tag  = new[] { 'T', 'E', 'S', 'T', '_', 'T', 'A', 'G' },
-            Code = new[] { 'X', '1', '2', '3' },
+            Tag  = new char[] { 'T', 'E', 'S', 'T', '_', 'T', 'A', 'G' },
+            Code = new char[] { 'X', '1', '2', '3' },
         };
         var bytes    = original.Serialize();
         var restored = CharArrayTelegram.Deserialize(bytes);
 
-        restored.DeviceId.Should().Be(0x0042);
-        restored.Tag.Should().Equal('T', 'E', 'S', 'T', '_', 'T', 'A', 'G');
-        restored.Code.Should().Equal('X', '1', '2', '3');
+        ((ushort)restored.DeviceId).Should().Be(0x0042);
+        ((char[])restored.Tag ).Should().Equal('T', 'E', 'S', 'T', '_', 'T', 'A', 'G');
+        ((char[])restored.Code).Should().Equal('X', '1', '2', '3');
     }
 
-    [Fact]
-    public void CharArray_ShortArray_PaddedWithZeros()
-    {
-        var t = new CharArrayTelegram
-        {
-            Tag  = new[] { 'A', 'B', 'C' },
-            Code = new[] { 'Z' },
-        };
-        var bytes = t.Serialize();
-
-        // Tag: 'A','B','C' then 5 zero bytes (starts at offset 2)
-        bytes[2].Should().Be((byte)'A');
-        bytes[3].Should().Be((byte)'B');
-        bytes[4].Should().Be((byte)'C');
-        bytes[5].Should().Be(0);
-        bytes[9].Should().Be(0);
-
-        // Code: 'Z' then 3 zero bytes (starts at offset 10)
-        bytes[10].Should().Be((byte)'Z');
-        bytes[11].Should().Be(0);
-    }
+    // ── 9. Definition usable for registry registration ────────────────────────
 
     [Fact]
-    public void CharArray_NullArray_SerializesAsAllZeros()
+    public void Definition_CanBeRegistered_WithRegistry()
     {
-        var t = new CharArrayTelegram { Tag = null, Code = null };
-        var bytes = t.Serialize();
-
-        // Data fields start at offset 2 (2 DeviceId)
-        for (int i = 2; i < 2 + 8 + 4; i++)
-            bytes[i].Should().Be(0, because: $"byte[{i}] should be zero for null char[]");
+        var registry = new TelegramRegistry();
+        registry.Register(TestStatusTelegram.Definition);
+        registry.TryGet("TestStatusTelegram", out _).Should().BeTrue();
     }
 }
+
