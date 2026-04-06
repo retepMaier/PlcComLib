@@ -23,9 +23,8 @@ internal static class S7TelegramReflector<T> where T : class, new()
     // ── Static constructor — runs exactly once per concrete T ─────────────────
     static S7TelegramReflector()
     {
-        _plan      = BuildPlan(typeof(T));
-        WireSize   = _plan.Sum(static p => p.WireSize);
-        Definition = BuildDefinition();
+        (_plan, WireSize) = BuildPlan(typeof(T));
+        Definition        = BuildDefinition();
     }
 
     // ── Public API ────────────────────────────────────────────────────────────
@@ -66,7 +65,7 @@ internal static class S7TelegramReflector<T> where T : class, new()
 
     // ── Plan building — runs once ─────────────────────────────────────────────
 
-    private static FieldPlan[] BuildPlan(Type type)
+    private static (FieldPlan[] Plans, int TotalWireSize) BuildPlan(Type type)
     {
         // Collect all public read/write properties whose type implements IS7FramingType,
         // in source-declaration order. MetadataToken is stable within a single type and
@@ -80,32 +79,43 @@ internal static class S7TelegramReflector<T> where T : class, new()
             .OrderBy(static p => p.MetadataToken)
             .ToArray();
 
-        var plans  = new List<FieldPlan>(props.Length);
-        int offset = 0;
+        // Build S7FieldDescriptors and compute PLC-aligned layout
+        var descriptors = new DataTypes.S7FieldDescriptor[props.Length];
+        var propMeta    = new (S7DataType DataType, int WireSize, int MaxLength)[props.Length];
 
-        foreach (var prop in props)
+        for (int i = 0; i < props.Length; i++)
         {
-            var propType   = prop.PropertyType;
-            var dataType   = (S7DataType)propType.GetProperty("DataType",   BindingFlags.Static | BindingFlags.Public)!.GetValue(null)!;
-            var wireSize   = (int)       propType.GetProperty("WireSize",   BindingFlags.Static | BindingFlags.Public)!.GetValue(null)!;
-            var maxLenProp =             propType.GetProperty("MaxLength",  BindingFlags.Static | BindingFlags.Public);
+            var propType   = props[i].PropertyType;
+            var dataType   = (S7DataType)propType.GetProperty("DataType",  BindingFlags.Static | BindingFlags.Public)!.GetValue(null)!;
+            var wireSize   = (int)       propType.GetProperty("WireSize",  BindingFlags.Static | BindingFlags.Public)!.GetValue(null)!;
+            var maxLenProp =             propType.GetProperty("MaxLength", BindingFlags.Static | BindingFlags.Public);
             int maxLength  = maxLenProp is not null ? (int)maxLenProp.GetValue(null)! : 0;
 
-            var (ser, deser) = CreateDelegates(prop, dataType, wireSize, maxLength);
+            descriptors[i] = new DataTypes.S7FieldDescriptor(props[i].Name, dataType, wireSize);
+            propMeta[i]    = (dataType, wireSize, maxLength);
+        }
+
+        var layout = DataTypes.S7Layout.Compute(descriptors);
+        var plans  = new List<FieldPlan>(props.Length);
+
+        for (int i = 0; i < props.Length; i++)
+        {
+            var (dataType, wireSize, maxLength) = propMeta[i];
+            var fieldLayout = layout.Fields[i];
+            var (ser, deser) = CreateDelegates(props[i], dataType, wireSize, maxLength, fieldLayout.BitIndex);
 
             plans.Add(new FieldPlan(
-                Name:       prop.Name,
+                Name:       props[i].Name,
                 DataType:   dataType,
                 WireSize:   wireSize,
-                Offset:     offset,
+                Offset:     fieldLayout.PlcOffset,
+                BitIndex:   fieldLayout.BitIndex,
                 MaxLength:  maxLength,
                 Serialize:  ser,
                 Deserialize: deser));
-
-            offset += wireSize;
         }
 
-        return [.. plans];
+        return ([.. plans], layout.TotalPlcSize);
     }
 
     private static TelegramDefinition BuildDefinition() => new()
@@ -122,13 +132,15 @@ internal static class S7TelegramReflector<T> where T : class, new()
             RawByteCount    = p.DataType is S7DataType.Raw or S7DataType.CharArray
                                   ? p.WireSize
                                   : 0,
+            PlcOffset       = p.Offset,
+            BitIndex        = p.BitIndex,
         }).ToList(),
     };
 
     // ── Delegate factory — one delegate pair per field ────────────────────────
 
     private static (Action<T, byte[], int, bool> Ser, Action<T, byte[], int, bool> Deser)
-        CreateDelegates(PropertyInfo prop, S7DataType dataType, int wireSize, int maxLength)
+        CreateDelegates(PropertyInfo prop, S7DataType dataType, int wireSize, int maxLength, int bitIndex)
     {
         Action<T, byte[], int, bool> ser;
         Action<T, byte[], int, bool> deser;
@@ -138,10 +150,11 @@ internal static class S7TelegramReflector<T> where T : class, new()
             // ── 1-byte ───────────────────────────────────────────────────────
             case S7DataType.Bool:
             {
+                int bi = bitIndex; // captured closure variable — preserves delegate signature
                 var get = CompileGetter<bool>(prop);
                 var set = CompileSetter<bool>(prop);
-                ser   = (inst, buf, off, _)  => buf[off] = get(inst) ? (byte)1 : (byte)0;
-                deser = (inst, buf, off, _)  => set(inst, buf[off] != 0);
+                ser   = (inst, buf, off, _)  => buf[off] |= get(inst) ? (byte)(1 << bi) : (byte)0;
+                deser = (inst, buf, off, _)  => set(inst, (buf[off] & (1 << bi)) != 0);
                 break;
             }
             case S7DataType.Byte:
@@ -431,6 +444,7 @@ internal static class S7TelegramReflector<T> where T : class, new()
         S7DataType DataType,
         int WireSize,
         int Offset,
+        int BitIndex,
         int MaxLength,
         Action<T, byte[], int, bool> Serialize,
         Action<T, byte[], int, bool> Deserialize)
@@ -439,6 +453,7 @@ internal static class S7TelegramReflector<T> where T : class, new()
         public S7DataType DataType   { get; } = DataType;
         public int        WireSize   { get; } = WireSize;
         public int        Offset     { get; } = Offset;
+        public int        BitIndex   { get; } = BitIndex;
         public int        MaxLength  { get; } = MaxLength;
         public Action<T, byte[], int, bool> Serialize   { get; } = Serialize;
         public Action<T, byte[], int, bool> Deserialize { get; } = Deserialize;
