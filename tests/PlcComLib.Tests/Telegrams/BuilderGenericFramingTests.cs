@@ -2,6 +2,7 @@ using FluentAssertions;
 using PlcComLib.DataTypes;
 using PlcComLib.Framing;
 using PlcComLib.Tcp;
+using PlcComLib.Udp;
 using Xunit;
 
 namespace PlcComLib.Tests.Telegrams;
@@ -190,5 +191,126 @@ public class BuilderGenericFramingTests
             System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)!;
         var actual = (S7DataType)prop.GetValue(null)!;
         actual.Should().Be(expected);
+    }
+
+    // ── Test telegram ─────────────────────────────────────────────────────────────
+    private class SelectorTestTelegram : PlcComLib.Telegrams.S7TelegramBase<SelectorTestTelegram>
+    {
+        public S7Int  TlgId     { get; set; } = 0;   // offset 0, wire size 2
+        public S7Int  TlgLength { get; set; } = 0;   // offset 2, wire size 2
+        public S7Word MachineId { get; set; } = 0;   // offset 4, wire size 2
+    }
+
+    // ── Property-selector overloads ──────────────────────────────────────────────
+
+    [Fact]
+    public void TcpClient_WithMessageId_Selector_SetsOffsetFromPropertyPosition()
+    {
+        var def = SelectorTestTelegram.Definition;
+        // Reset in case other tests modified it
+        def.MessageId = 0; def.MessageIdByteOffset = -1;
+
+        new TcpPlcClientBuilder()
+            .ConnectTo("127.0.0.1", 2000)
+            .RegisterTelegram<SelectorTestTelegram>()
+            .WithMessageId(id: 1, (SelectorTestTelegram t) => t.TlgId);
+
+        def.MessageId.Should().Be(1);
+        def.MessageIdByteOffset.Should().Be(0);          // TlgId is first field → offset 0
+        def.MessageIdDataType.Should().Be(S7DataType.Int);
+    }
+
+    [Fact]
+    public void TcpClient_WithLength_Selector_SetsOffsetFromPropertyPosition()
+    {
+        var def = SelectorTestTelegram.Definition;
+        def.LengthByteOffset = -1;
+
+        new TcpPlcClientBuilder()
+            .ConnectTo("127.0.0.1", 2000)
+            .RegisterTelegram<SelectorTestTelegram>()
+            .WithMessageId(id: 1, (SelectorTestTelegram t) => t.TlgId)
+            .WithLength(length: 12, (SelectorTestTelegram t) => t.TlgLength);
+
+        def.ConfiguredWireSize.Should().Be(12);
+        def.LengthByteOffset.Should().Be(2);             // TlgLength is second field → offset 2
+        def.LengthDataType.Should().Be(S7DataType.Int);
+    }
+
+    [Fact]
+    public void TcpClient_WithMessageId_Selector_ThirdField_SetsCorrectOffset()
+    {
+        var def = SelectorTestTelegram.Definition;
+
+        new TcpPlcClientBuilder()
+            .ConnectTo("127.0.0.1", 2000)
+            .RegisterTelegram<SelectorTestTelegram>()
+            .WithMessageId(id: 99, (SelectorTestTelegram t) => t.MachineId);
+
+        def.MessageIdByteOffset.Should().Be(4);          // MachineId is third field → offset 0+2+2=4
+        def.MessageIdDataType.Should().Be(S7DataType.Word);
+    }
+
+    [Fact]
+    public void TcpServer_WithMessageId_Selector_SetsOffsetAndDataType()
+    {
+        var def = SelectorTestTelegram.Definition;
+        def.MessageId = 0; def.MessageIdByteOffset = -1;
+
+        new TcpPlcServerBuilder()
+            .ListenOn("0.0.0.0", 2000)
+            .RegisterTelegram<SelectorTestTelegram>()
+            .WithMessageId(id: 5, (SelectorTestTelegram t) => t.TlgId);
+
+        def.MessageId.Should().Be(5);
+        def.MessageIdByteOffset.Should().Be(0);
+        def.MessageIdDataType.Should().Be(S7DataType.Int);
+    }
+
+    [Fact]
+    public void TcpServer_WithLength_Selector_SetsOffsetAndDataType()
+    {
+        var def = SelectorTestTelegram.Definition;
+
+        new TcpPlcServerBuilder()
+            .ListenOn("0.0.0.0", 2000)
+            .RegisterTelegram<SelectorTestTelegram>()
+            .WithMessageId(id: 5, (SelectorTestTelegram t) => t.TlgId)
+            .WithLength(length: 6, (SelectorTestTelegram t) => t.TlgLength);
+
+        def.ConfiguredWireSize.Should().Be(6);
+        def.LengthByteOffset.Should().Be(2);
+        def.LengthDataType.Should().Be(S7DataType.Int);
+    }
+
+    [Fact]
+    public void UdpClient_WithMessageId_Selector_SetsOffsetAndDataType()
+    {
+        var def = SelectorTestTelegram.Definition;
+        def.MessageId = 0; def.MessageIdByteOffset = -1;
+
+        new UdpPlcClientBuilder()
+            .SendTo("127.0.0.1", 5000)
+            .RegisterTelegram<SelectorTestTelegram>()
+            .WithMessageId(id: 7, (SelectorTestTelegram t) => t.TlgId);
+
+        def.MessageId.Should().Be(7);
+        def.MessageIdByteOffset.Should().Be(0);
+        def.MessageIdDataType.Should().Be(S7DataType.Int);
+    }
+
+    [Fact]
+    public void UdpServer_WithLength_Selector_SetsOffsetAndDataType()
+    {
+        var def = SelectorTestTelegram.Definition;
+
+        new UdpPlcServerBuilder()
+            .ListenOn("0.0.0.0", 5000)
+            .RegisterTelegram<SelectorTestTelegram>()
+            .WithMessageId(id: 7, (SelectorTestTelegram t) => t.TlgId)
+            .WithLength(length: 6, (SelectorTestTelegram t) => t.TlgLength);
+
+        def.LengthByteOffset.Should().Be(2);
+        def.LengthDataType.Should().Be(S7DataType.Int);
     }
 }

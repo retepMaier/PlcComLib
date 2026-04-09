@@ -12,7 +12,7 @@ var client = new TcpPlcClientBuilder()
     .WithByteOrder(ByteOrder.BigEndian)
     .RegisterTelegram<MachineStatus>()
         .WithMessageId<S7Int>(id: 1, byteOffset: 0)
-        .WithLength<S7Int>(length: 12, byteOffset: 2)
+        .WithLength<S7Int>(length: 8, byteOffset: 2)
     .Build();
 
 
@@ -27,7 +27,7 @@ var client = new TcpPlcClientBuilder()
 // Subscribe to incoming typed telegrams
 client.Subscribe<MachineStatus>(msg =>
 {
-    Console.WriteLine($"Machine {msg.MachineId}: speed={msg.CurrentSpeed}, running={msg.IsRunning}");
+    //Console.WriteLine($"Machine {msg.MachineId}: speed={msg.CurrentSpeed}, running={msg.IsRunning}");
 });
 
 
@@ -49,6 +49,15 @@ client.TelegramReceived += (sender, raw) =>
 
 
 await client.StartAsync();
+
+
+await client.SendAsync<MachineStatus>(new MachineStatus
+{
+    TlgId = 1,
+    TlgLength = 12,
+    Speed = 123.45f,
+});
+
 
 
 Console.ReadKey();
