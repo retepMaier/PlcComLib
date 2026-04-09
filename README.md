@@ -17,7 +17,7 @@ Declare telegram fields as **S7 value structs** — the type carries both the S7
 | 🧱 **S7 value structs** | Declare properties as `S7Word`, `S7Int`, `S7Real`, `S7String<L32>`, … The type *is* the annotation. |
 | ⚡ **Zero hot-path overhead** | Expression-tree delegates are compiled once per type. Every subsequent call is pure pre-compiled code — no reflection, no boxing. |
 | 🔗 **Fluent builder API** | Configure connections, register telegram types, and set TelegramId + wire-size in a clean, readable chain. |
-| 🔀 **Flexible TelegramId types** | `.WithMessageId<TType>(id, byteOffset)` accepts any S7 framing struct; `id` is `long` so any numeric literal passes without a cast. |
+| 🔀 **Flexible TelegramId types** | `.WithMessageId<TType>(id, byteOffset)` accepts any S7 framing struct; `.WithMessageId(id, t => t.Field)` resolves offset automatically from the property. |
 | 🌐 **Multiple transports** | TCP (with auto-reconnect) and UDP — both as client and server. |
 | 🖼️ **Flexible framing** | `TelegramIdFramer` (default), or plug in your own `IMessageFramer`. |
 | ↔️ **Configurable byte order** | `BigEndian` (Siemens S7 default) or `LittleEndian`, set once on the builder. |
@@ -88,8 +88,8 @@ var client = new TcpPlcClientBuilder()
     .WithByteOrder(ByteOrder.BigEndian)   // Siemens S7 default
     .WithNoDelay()                        // avoids Nagle coalescing delays
     .RegisterTelegram<MachineStatus>()
-        .WithMessageId<S7Int>(id: 1,  byteOffset: 0)
-        .WithLength<S7Int>   (length: 12, byteOffset: 2)
+        .WithMessageId(id: 1,      (MachineStatus t) => t.TlgId)      // offset inferred from property
+        .WithLength   (length: 12, (MachineStatus t) => t.TlgLength)  // offset inferred from property
     .Build();
 
 client.Subscribe<MachineStatus>(msg =>
@@ -116,8 +116,8 @@ var server = new TcpPlcServerBuilder()
     .ListenOn("0.0.0.0", 2000)
     .WithMaxConnections(20)
     .RegisterTelegram<MachineStatus>()
-        .WithMessageId<S7Int>(id: 1,  byteOffset: 0)
-        .WithLength<S7Int>   (length: 12, byteOffset: 2)
+        .WithMessageId(id: 1,      (MachineStatus t) => t.TlgId)
+        .WithLength   (length: 12, (MachineStatus t) => t.TlgLength)
     .Build();
 
 server.Subscribe<MachineStatus>((msg, address, port) =>
@@ -138,15 +138,15 @@ var udpClient = new UdpPlcClientBuilder()
     .SendTo("192.168.1.100", 5000)
     .WithByteOrder(ByteOrder.BigEndian)
     .RegisterTelegram<MachineStatus>()
-        .WithMessageId<S7Int>(id: 1, byteOffset: 0)
-        .WithLength<S7Int>(length: 12, byteOffset: 2)
+        .WithMessageId(id: 1,      (MachineStatus t) => t.TlgId)
+        .WithLength   (length: 12, (MachineStatus t) => t.TlgLength)
     .Build();
 
 var udpServer = new UdpPlcServerBuilder()
     .ListenOn("0.0.0.0", 5000)
     .RegisterTelegram<MachineStatus>()
-        .WithMessageId<S7Int>(id: 1, byteOffset: 0)
-        .WithLength<S7Int>(length: 12, byteOffset: 2)
+        .WithMessageId(id: 1,      (MachineStatus t) => t.TlgId)
+        .WithLength   (length: 12, (MachineStatus t) => t.TlgLength)
     .Build();
 ```
 
@@ -222,8 +222,8 @@ var client = new TcpPlcClientBuilder()
     .WithByteOrder(ByteOrder.BigEndian)
     .WithNoDelay()
     .RegisterTelegram<ConveyorLineTelegram>()
-        .WithMessageId<S7Int>(id: 1,  byteOffset: 0)
-        .WithLength<S7Int>   (length: 36, byteOffset: 2)
+        .WithMessageId(id: 1,      (ConveyorLineTelegram t) => t.TlgId)
+        .WithLength   (length: 36, (ConveyorLineTelegram t) => t.TlgLength)
     .Build();
 ```
 
@@ -299,7 +299,9 @@ public class ProductTelegram : S7TelegramBase<ProductTelegram>
 | `.RegisterTelegram<T>()` | — | Registers a typed telegram definition from `T.Definition` |
 | `.RegisterTelegram(def)` | — | Registers a hand-crafted `TelegramDefinition` |
 | `.WithMessageId<TType>(id, byteOffset)` | — | Sets the TelegramId, byte offset, and wire type for the last registered telegram |
+| `.WithMessageId(id, t => t.Field)` | — | Sets the TelegramId; byte offset and wire type inferred from the property |
 | `.WithLength<TType>(length, byteOffset)` | — | Sets the expected wire size and optional length-field validation |
+| `.WithLength(length, t => t.Field)` | — | Sets wire size; byte offset and wire type inferred from the property |
 | `.Build()` | — | Returns a configured `TcpPlcClient` |
 
 ### `TcpPlcServerBuilder`
@@ -317,7 +319,9 @@ public class ProductTelegram : S7TelegramBase<ProductTelegram>
 | `.RegisterTelegram<T>()` | — | Registers a typed telegram definition |
 | `.RegisterTelegram(def)` | — | Registers a hand-crafted `TelegramDefinition` |
 | `.WithMessageId<TType>(id, byteOffset)` | — | Sets the TelegramId for the last registered telegram |
+| `.WithMessageId(id, t => t.Field)` | — | Sets the TelegramId; byte offset and wire type inferred from the property |
 | `.WithLength<TType>(length, byteOffset)` | — | Sets the expected wire size and optional length-field validation |
+| `.WithLength(length, t => t.Field)` | — | Sets wire size; byte offset and wire type inferred from the property |
 | `.Build()` | — | Returns a configured `TcpPlcServer` |
 
 ### `UdpPlcClientBuilder`
@@ -333,7 +337,9 @@ public class ProductTelegram : S7TelegramBase<ProductTelegram>
 | `.RegisterTelegram<T>()` | — | Registers a typed telegram definition |
 | `.RegisterTelegram(def)` | — | Registers a hand-crafted `TelegramDefinition` |
 | `.WithMessageId<TType>(id, byteOffset)` | — | Sets the TelegramId for the last registered telegram |
+| `.WithMessageId(id, t => t.Field)` | — | Sets the TelegramId; byte offset and wire type inferred from the property |
 | `.WithLength<TType>(length, byteOffset)` | — | Sets the expected wire size and optional length-field validation |
+| `.WithLength(length, t => t.Field)` | — | Sets wire size; byte offset and wire type inferred from the property |
 | `.Build()` | — | Returns a configured `UdpPlcClient` |
 
 ### `UdpPlcServerBuilder`
@@ -348,7 +354,9 @@ public class ProductTelegram : S7TelegramBase<ProductTelegram>
 | `.RegisterTelegram<T>()` | — | Registers a typed telegram definition |
 | `.RegisterTelegram(def)` | — | Registers a hand-crafted `TelegramDefinition` |
 | `.WithMessageId<TType>(id, byteOffset)` | — | Sets the TelegramId for the last registered telegram |
+| `.WithMessageId(id, t => t.Field)` | — | Sets the TelegramId; byte offset and wire type inferred from the property |
 | `.WithLength<TType>(length, byteOffset)` | — | Sets the expected wire size and optional length-field validation |
+| `.WithLength(length, t => t.Field)` | — | Sets wire size; byte offset and wire type inferred from the property |
 | `.Build()` | — | Returns a configured `UdpPlcServer` |
 
 > **Registration order matters:** `.WithMessageId()` and `.WithLength()` always apply to the *most recently* called `RegisterTelegram()`.
@@ -384,6 +392,23 @@ public class ProductTelegram : S7TelegramBase<ProductTelegram>
 .RegisterTelegram<T>()
     .WithMessageId<S7LInt>(id: 0x0102_0304_0506_0708L, byteOffset: 0)
 ```
+
+### Property-selector style (no manual offset)
+
+When using source-generated typed telegrams, you can reference the field property directly and let the builder derive the byte offset and wire type automatically:
+
+```csharp
+.RegisterTelegram<MachineStatus>()
+    .WithMessageId(id: 1,      (MachineStatus t) => t.TlgId)      // S7Int at offset 0
+    .WithLength   (length: 12, (MachineStatus t) => t.TlgLength)  // S7Int at offset 2
+
+// Equivalent explicit form:
+.RegisterTelegram<MachineStatus>()
+    .WithMessageId<S7Int>(id: 1,      byteOffset: 0)
+    .WithLength<S7Int>   (length: 12, byteOffset: 2)
+```
+
+Both type arguments (`TTelegram` and `TField`) are inferred from the lambda. The explicit `(MachineStatus t)` parameter type annotation is required because the builder itself is not generic.
 
 ---
 
