@@ -127,6 +127,15 @@ public sealed class TcpPlcServer(
         RawBytesSent?.Invoke(this, new RawBytesEventArgs(framed, ctx.RemoteAddress, ctx.Port));
     }
 
+    /// <summary>Sends a legacy untyped telegram to a specific client identified by remote IP address and port.</summary>
+    public async Task SendToAsync(string remoteAddress, int port, Telegram telegram, CancellationToken cancellationToken = default)
+    {
+        var ctx = FindClient(remoteAddress, port);
+        var framed = _framer.Frame(TelegramSerializer.Serialize(telegram, byteOrder));
+        await ctx.SendAsync(framed, cancellationToken);
+        RawBytesSent?.Invoke(this, new RawBytesEventArgs(framed, ctx.RemoteAddress, ctx.Port));
+    }
+
     /// <summary>Sends a strongly-typed telegram to a specific client.</summary>
     public async Task SendToAsync<T>(Guid clientId, T telegram, CancellationToken cancellationToken = default)where T : ITypedS7Telegram<T>
     {
@@ -135,6 +144,24 @@ public sealed class TcpPlcServer(
         var framed = _framer.Frame(telegram.Serialize(byteOrder));
         await ctx.SendAsync(framed, cancellationToken);
         RawBytesSent?.Invoke(this, new RawBytesEventArgs(framed, ctx.RemoteAddress, ctx.Port));
+    }
+
+    /// <summary>Sends a strongly-typed telegram to a specific client identified by remote IP address and port.</summary>
+    public async Task SendToAsync<T>(string remoteAddress, int port, T telegram, CancellationToken cancellationToken = default)where T : ITypedS7Telegram<T>
+    {
+        var ctx = FindClient(remoteAddress, port);
+        var framed = _framer.Frame(telegram.Serialize(byteOrder));
+        await ctx.SendAsync(framed, cancellationToken);
+        RawBytesSent?.Invoke(this, new RawBytesEventArgs(framed, ctx.RemoteAddress, ctx.Port));
+    }
+
+    private ClientContext FindClient(string remoteAddress, int port)
+    {
+        var ctx = _clients.Values.FirstOrDefault(c =>
+            string.Equals(c.RemoteAddress, remoteAddress, StringComparison.Ordinal) && c.Port == port);
+        if (ctx is null)
+            throw new KeyNotFoundException($"No connected client found at {remoteAddress}:{port}.");
+        return ctx;
     }
 
     // ── Typed subscription ────────────────────────────────────────────────────
