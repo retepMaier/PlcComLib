@@ -13,7 +13,7 @@ namespace PlcComLib.Tcp;
 /// Supports automatic reconnection, message framing, typed telegrams, and full-duplex communication.
 /// This class is thread-safe.
 /// </summary>
-public sealed class TcpPlcClient(
+public sealed partial class TcpPlcClient(
     ConnectionConfiguration config,
     TelegramRegistry registry,
     ILogger<TcpPlcClient>? logger = null,
@@ -137,7 +137,7 @@ public sealed class TcpPlcClient(
             var def = T.Definition;
             if (!MatchesMessageId(e.RawPayload, def)) return;
             try { handler(T.Deserialize(e.RawPayload, byteOrder)); }
-            catch (Exception ex) { logger?.LogWarning(ex, "Typed handler for {T} threw.", typeof(T).Name); }
+            catch (Exception ex) { LogTypedHandlerThrew(logger, ex, typeof(T).Name); }
         };
         TelegramReceived += listener;
         return new Subscription(() => TelegramReceived -= listener);
@@ -157,7 +157,7 @@ public sealed class TcpPlcClient(
             var def = T.Definition;
             if (!MatchesMessageId(e.RawPayload, def)) return;
             try { handler(T.Deserialize(e.RawPayload, byteOrder), e.RemoteAddress, e.Port); }
-            catch (Exception ex) { logger?.LogWarning(ex, "Typed handler for {T} threw.", typeof(T).Name); }
+            catch (Exception ex) { LogTypedHandlerThrew(logger, ex, typeof(T).Name); }
         };
         TelegramReceived += listener;
         return new Subscription(() => TelegramReceived -= listener);
@@ -171,7 +171,7 @@ public sealed class TcpPlcClient(
         {
             try
             {
-                logger?.LogInformation("Connecting to {Host}:{Port}...", _config.Host, _config.Port);
+                LogConnecting(logger, _config.Host, _config.Port);
                 _client = new TcpClient
                 {
                     SendTimeout    = _config.TimeoutMs,
@@ -191,7 +191,7 @@ public sealed class TcpPlcClient(
             }
             catch (Exception ex)
             {
-                logger?.LogWarning(ex, "Connection to {Host}:{Port} failed. Retrying in {Interval} ms.", _config.Host, _config.Port, _config.ReconnectIntervalMs);
+                LogConnectionFailed(logger, ex, _config.Host, _config.Port, _config.ReconnectIntervalMs);
             }
             finally
             {
@@ -220,13 +220,13 @@ public sealed class TcpPlcClient(
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                logger?.LogWarning(ex, "Read error on TCP stream.");
+                LogTcpReadError(logger, ex);
                 break;
             }
 
             if (bytesRead == 0)
             {
-                logger?.LogInformation("Remote endpoint closed the connection.");
+                LogRemoteEndpointClosed(logger);
                 break;
             }
 
@@ -259,7 +259,7 @@ public sealed class TcpPlcClient(
                 if (consumed > 0)
                 {
                     // Definite ID mismatch — discard unrecognised byte(s) and keep scanning.
-                    logger?.LogWarning("Unrecognised telegram ID in receive buffer; discarding {Count} byte(s).", consumed);
+                    LogUnrecognisedTelegramId(logger, consumed);
                     int rem = dataLength - consumed;
                     // Shift remaining bytes to the front, then truncate.
                     if (rem > 0)
@@ -314,7 +314,7 @@ public sealed class TcpPlcClient(
         }
 
         // 3. No match — raise UnknownTelegramReceived
-        logger?.LogWarning("No matching telegram definition for payload of {Length} bytes.", payload.Length);
+        LogNoMatchingDefinition(logger, payload.Length);
         UnknownTelegramReceived?.Invoke(this, new UnknownTelegramEventArgs(payload, byteOrder));
     }
 
@@ -331,7 +331,7 @@ public sealed class TcpPlcClient(
         int fieldEnd = def.LengthByteOffset + S7TypeConverter.GetWireSize(def.LengthDataType);
         if (payload.Length < fieldEnd)
         {
-            logger?.LogWarning("Telegram '{Id}': length field at offset {Offset} extends beyond payload ({PayloadLen} bytes).", def.Id, def.LengthByteOffset, payload.Length);
+            LogLengthFieldBeyondPayload(logger, def.Id, def.LengthByteOffset, payload.Length);
             UnknownTelegramReceived?.Invoke(this, new UnknownTelegramEventArgs(payload, byteOrder));
             return false;
         }
@@ -339,7 +339,7 @@ public sealed class TcpPlcClient(
         long receivedLength = TelegramIdFramer.ReadLength(payload, def.LengthByteOffset, def.LengthDataType, byteOrder);
         if (receivedLength != def.ConfiguredWireSize)
         {
-            logger?.LogWarning("Telegram '{Id}': length field mismatch — expected {Expected}, got {Received}.", def.Id, def.ConfiguredWireSize, receivedLength);
+            LogLengthFieldMismatch(logger, def.Id, def.ConfiguredWireSize, receivedLength);
             UnknownTelegramReceived?.Invoke(this, new UnknownTelegramEventArgs(payload, byteOrder));
             return false;
         }
@@ -356,7 +356,7 @@ public sealed class TcpPlcClient(
         }
         catch (Exception ex)
         {
-            logger?.LogWarning(ex, "Failed to deserialize telegram '{Id}'.", def.Id);
+            LogDeserializeFailed(logger, ex, def.Id);
         }
     }
 
@@ -382,7 +382,7 @@ public sealed class TcpPlcClient(
     {
         _isConnected = connected;
         ConnectionStateChanged?.Invoke(this, new ConnectionStateChangedEventArgs(connected, reason));
-        logger?.LogInformation("Connection state: {State} ({Reason})", connected ? "Connected" : "Disconnected", reason);
+        LogConnectionState(logger, connected ? "Connected" : "Disconnected", reason);
     }
 
     private void CloseConnection(string reason)
