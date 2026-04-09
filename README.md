@@ -125,8 +125,9 @@ server.Subscribe<MachineStatus>((msg, address, port) =>
 
 await server.StartAsync();
 
-// Unicast reply to a specific client
+// Unicast reply to a specific client — by Guid or by IP + port
 await server.SendToAsync(clientId, status);
+await server.SendToAsync("192.168.1.50", 54321, status);
 ```
 
 ---
@@ -419,8 +420,17 @@ The server additionally supports unicast send:
 // Send to all connected clients (broadcast)
 await server.SendAsync(status);
 
-// Send to a specific client (unicast)
+// TCP — unicast to a specific client by Guid
 await server.SendToAsync(clientId, status);
+
+// TCP — unicast to a specific client by remote IP + port
+await server.SendToAsync("192.168.1.50", 54321, status);
+
+// UDP — send to a specific endpoint by IPEndPoint
+await udpServer.SendToAsync(remoteEndpoint, status);
+
+// UDP — send to a specific endpoint by IP + port
+await udpServer.SendToAsync("192.168.1.50", 5000, status);
 ```
 
 ---

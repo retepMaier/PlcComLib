@@ -116,12 +116,32 @@ public sealed class UdpPlcServer(
         await SendToEndpointAsync(TelegramSerializer.Serialize(telegram, byteOrder), endpoint, cancellationToken);
     }
 
+    /// <summary>Sends a legacy untyped telegram to a specific remote address and port.</summary>
+    public async Task SendToAsync(string remoteAddress, int port, Telegram telegram, CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (!_isConnected || _udpClient == null) throw new InvalidOperationException("UDP server is not started.");
+        if (!IPAddress.TryParse(remoteAddress, out var ipAddress))
+            throw new ArgumentException($"Invalid IP address: '{remoteAddress}'.", nameof(remoteAddress));
+        await SendToEndpointAsync(TelegramSerializer.Serialize(telegram, byteOrder), new IPEndPoint(ipAddress, port), cancellationToken);
+    }
+
     /// <summary>Sends a strongly-typed telegram to a specific endpoint.</summary>
     public async Task SendToAsync<T>(IPEndPoint endpoint, T telegram, CancellationToken cancellationToken = default)where T : ITypedS7Telegram<T>
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (!_isConnected || _udpClient == null) throw new InvalidOperationException("UDP server is not started.");
         await SendToEndpointAsync(telegram.Serialize(byteOrder), endpoint, cancellationToken);
+    }
+
+    /// <summary>Sends a strongly-typed telegram to a specific remote address and port.</summary>
+    public async Task SendToAsync<T>(string remoteAddress, int port, T telegram, CancellationToken cancellationToken = default)where T : ITypedS7Telegram<T>
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (!_isConnected || _udpClient == null) throw new InvalidOperationException("UDP server is not started.");
+        if (!IPAddress.TryParse(remoteAddress, out var ipAddress))
+            throw new ArgumentException($"Invalid IP address: '{remoteAddress}'.", nameof(remoteAddress));
+        await SendToEndpointAsync(telegram.Serialize(byteOrder), new IPEndPoint(ipAddress, port), cancellationToken);
     }
 
     private async Task SendToEndpointAsync(byte[] payload, IPEndPoint endpoint, CancellationToken ct)
