@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using Microsoft.Extensions.Logging;
 using PlcComLib.Core;
 using PlcComLib.DataTypes;
@@ -149,7 +150,49 @@ public sealed class TcpPlcClientBuilder
         return this;
     }
 
+    /// <summary>
+    /// Sets the TelegramId for the most recently registered telegram by referencing
+    /// a property of the telegram type <typeparamref name="TTelegram"/> directly.
+    /// The byte offset and S7 wire type are derived automatically from the property's
+    /// position in the telegram definition — no manual offset calculation needed.
+    /// </summary>
+    /// <typeparam name="TTelegram">The typed telegram class that owns the field.</typeparam>
+    /// <typeparam name="TField">S7 data type of the field (inferred from the lambda).</typeparam>
+    /// <param name="id">Expected id value for this telegram type.</param>
+    /// <param name="fieldSelector">Lambda pointing to the id field, e.g. <c>(MachineStatus t) => t.TlgId</c>.</param>
+    public TcpPlcClientBuilder WithMessageId<TTelegram, TField>(
+        long id,
+        Expression<Func<TTelegram, TField>> fieldSelector)
+        where TTelegram : ITypedS7Telegram<TTelegram>
+        where TField    : IS7FramingType
+    {
+        if (_lastRegisteredDef is null) return this;
 
+        if (fieldSelector.Body is not MemberExpression member)
+            throw new ArgumentException(
+                "Selector must be a simple property access, e.g. (MachineStatus t) => t.TlgId",
+                nameof(fieldSelector));
+
+        string propName = member.Member.Name;
+
+        int offset = 0;
+        bool found = false;
+        foreach (var field in _lastRegisteredDef.Fields)
+        {
+            if (field.Name == propName) { found = true; break; }
+            offset += field.WireSize;
+        }
+
+        if (!found)
+            throw new ArgumentException(
+                $"Property '{propName}' was not found in the definition for '{_lastRegisteredDef.Id}'.",
+                nameof(fieldSelector));
+
+        _lastRegisteredDef.MessageId           = id;
+        _lastRegisteredDef.MessageIdByteOffset = offset;
+        _lastRegisteredDef.MessageIdDataType   = TField.DataType;
+        return this;
+    }
 
     /// <summary>
     /// Sets the expected total wire size for the most recently registered telegram and
@@ -173,6 +216,51 @@ public sealed class TcpPlcClientBuilder
             _lastRegisteredDef.LengthByteOffset   = byteOffset;
             _lastRegisteredDef.LengthDataType     = TType.DataType;
         }
+        return this;
+    }
+
+    /// <summary>
+    /// Sets the expected total wire size for the most recently registered telegram and
+    /// configures a length-field validation check by referencing a property of the telegram
+    /// type <typeparamref name="TTelegram"/> directly.
+    /// The byte offset and S7 wire type are derived automatically from the property's
+    /// position in the telegram definition — no manual offset calculation needed.
+    /// </summary>
+    /// <typeparam name="TTelegram">The typed telegram class that owns the field.</typeparam>
+    /// <typeparam name="TField">S7 data type of the field (inferred from the lambda).</typeparam>
+    /// <param name="length">Expected total length in bytes.</param>
+    /// <param name="fieldSelector">Lambda pointing to the length field, e.g. <c>(MachineStatus t) => t.TlgLength</c>.</param>
+    public TcpPlcClientBuilder WithLength<TTelegram, TField>(
+        long length,
+        Expression<Func<TTelegram, TField>> fieldSelector)
+        where TTelegram : ITypedS7Telegram<TTelegram>
+        where TField    : IS7FramingType
+    {
+        if (_lastRegisteredDef is null) return this;
+
+        if (fieldSelector.Body is not MemberExpression member)
+            throw new ArgumentException(
+                "Selector must be a simple property access, e.g. (MachineStatus t) => t.TlgLength",
+                nameof(fieldSelector));
+
+        string propName = member.Member.Name;
+
+        int offset = 0;
+        bool found = false;
+        foreach (var field in _lastRegisteredDef.Fields)
+        {
+            if (field.Name == propName) { found = true; break; }
+            offset += field.WireSize;
+        }
+
+        if (!found)
+            throw new ArgumentException(
+                $"Property '{propName}' was not found in the definition for '{_lastRegisteredDef.Id}'.",
+                nameof(fieldSelector));
+
+        _lastRegisteredDef.ConfiguredWireSize = (int)length;
+        _lastRegisteredDef.LengthByteOffset   = offset;
+        _lastRegisteredDef.LengthDataType     = TField.DataType;
         return this;
     }
 
