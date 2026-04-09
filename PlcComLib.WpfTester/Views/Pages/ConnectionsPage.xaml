@@ -396,9 +396,9 @@ Foreground="{DynamicResource TextFillColorPrimaryBrush}"
                                                                                     FontFamily="Consolas"
                                                                                     FontSize="10"
                                                                                     Opacity="0.75">
-                                                                                    <Run Text="{Binding Key}" FontWeight="SemiBold"/>
+                                                                                    <Run Text="{Binding Key, Mode=OneWay}" FontWeight="SemiBold"/>
                                                                                     <Run Text=" = "/>
-                                                                                    <Run Text="{Binding Value}"/>
+                                                                                    <Run Text="{Binding Value, Mode=OneWay}"/>
                                                                                 </TextBlock>
                                                                             </DataTemplate>
                                                                         </ItemsControl.ItemTemplate>

@@ -1,20 +1,20 @@
-using System.Collections.ObjectModel;
-using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
-using PlcComLib.Core.PlcTypes;
 using PlcComLib.Core.Events;
+using PlcComLib.Core.PlcTypes;
 using PlcComLib.DataTypes;
 using PlcComLib.Tcp;
 using PlcComLib.Telegrams;
 using PlcComLib.Udp;
 using PlcComLib.WpfTester.Models;
 using PlcComLib.WpfTester.Services;
+using System.Collections.ObjectModel;
+using System.Windows;
 
 namespace PlcComLib.WpfTester.ViewModels;
 
-public sealed partial class ConnectionItemViewModel(ConnectionSettings settings, ILogService logService, ILogger logger) : ObservableObject, IAsyncDisposable
+public sealed partial class ConnectionItemViewModel(ConnectionSettings settings, ILogService logService, ITelegramLibraryService telegramLibrary, ILogger logger) : ObservableObject, IAsyncDisposable
 {
     private IAsyncDisposable? _connection;
 
@@ -58,6 +58,7 @@ public sealed partial class ConnectionItemViewModel(ConnectionSettings settings,
         IsBusy = true;
         try
         {
+            RefreshTelegramsFromLibrary();
             BuildConnection();
             if (_startAction is not null)
             {
@@ -451,6 +452,39 @@ public sealed partial class ConnectionItemViewModel(ConnectionSettings settings,
             while (Messages.Count > 50)
                 Messages.RemoveAt(0);
         });
+    }
+
+    private void RefreshTelegramsFromLibrary()
+    {
+        if (Settings.Telegrams.Count == 0) return;
+
+        var selectedTelegramId = SelectedTelegram?.Telegram.Id;
+        ConnectionTelegramEntry? refreshedSelection = null;
+
+        for (int i = 0; i < Settings.Telegrams.Count; i++)
+        {
+            var existingEntry = Settings.Telegrams[i];
+            var libraryTelegram = telegramLibrary.Telegrams.FirstOrDefault(t => t.Id == existingEntry.Telegram.Id);
+            if (libraryTelegram is null) continue;
+
+            var refreshedEntry = new ConnectionTelegramEntry(libraryTelegram.DeepCopy())
+            {
+                MessageId = existingEntry.MessageId,
+                MessageIdByteOffset = existingEntry.MessageIdByteOffset,
+                MessageIdDataType = existingEntry.MessageIdDataType,
+                MessageLength = existingEntry.MessageLength,
+                LengthByteOffset = existingEntry.LengthByteOffset,
+                LengthDataType = existingEntry.LengthDataType,
+            };
+
+            Settings.Telegrams[i] = refreshedEntry;
+
+            if (selectedTelegramId == refreshedEntry.Telegram.Id)
+                refreshedSelection = refreshedEntry;
+        }
+
+        if (refreshedSelection is not null)
+            SelectedTelegram = refreshedSelection;
     }
 
     private void RegisterTelegram(TcpPlcClientBuilder builder, ConnectionTelegramEntry entry)
