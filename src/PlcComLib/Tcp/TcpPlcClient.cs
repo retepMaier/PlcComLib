@@ -20,7 +20,7 @@ public sealed partial class TcpPlcClient(
     ByteOrder byteOrder = ByteOrder.BigEndian) : IPlcConnection
 {
     private readonly ConnectionConfiguration _config = config ?? throw new ArgumentNullException(nameof(config));
-    private readonly IMessageFramer _framer =  new TelegramIdFramer(registry.Definitions, byteOrder);
+    private readonly TelegramIdFramer _framer =  new(registry.Definitions, byteOrder);
 
     // Pre-built dispatch lookup tables (constructed once, used on every received telegram).
     // _idGroups: for each unique (offset, type) combination used as a MessageId discriminator,

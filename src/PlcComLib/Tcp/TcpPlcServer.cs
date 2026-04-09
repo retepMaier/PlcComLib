@@ -21,8 +21,7 @@ public sealed partial class TcpPlcServer(
     ByteOrder byteOrder = ByteOrder.BigEndian) : IPlcConnection
 {
     private readonly ConnectionConfiguration _config = config ?? throw new ArgumentNullException(nameof(config));
-    //private readonly TelegramRegistry _registry = registry ?? throw new ArgumentNullException(nameof(registry));
-    private readonly IMessageFramer _framer =  new TelegramIdFramer(registry.Definitions, byteOrder);
+    private readonly TelegramIdFramer _framer =  new(registry.Definitions, byteOrder);
 
     // Pre-built dispatch lookup tables — see TcpPlcClient for rationale.
     private readonly (int Offset, S7DataType Type, Dictionary<long, TelegramDefinition> Lookup)[] _idGroups =
