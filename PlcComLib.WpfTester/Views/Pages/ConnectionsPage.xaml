@@ -160,7 +160,6 @@ Foreground="{DynamicResource TextFillColorPrimaryBrush}"
                                 <Expander
                                     Grid.Row="1"
                                     Header="⚙ Connection Settings"
-                                    IsEnabled="{Binding CanEdit}"
                                     Margin="0"
                                     Padding="16,8">
                                     <Grid Margin="0,8,0,0">
@@ -178,23 +177,23 @@ Foreground="{DynamicResource TextFillColorPrimaryBrush}"
                                         </Grid.RowDefinitions>
                                         <StackPanel Grid.Column="0" Grid.Row="0">
                                             <TextBlock Text="Name" FontSize="11" Opacity="0.7" Margin="0,0,0,2"/>
-                                            <ui:TextBox Text="{Binding Settings.Name, UpdateSourceTrigger=PropertyChanged}"/>
+                                            <ui:TextBox Text="{Binding Settings.Name, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding CanEdit}"/>
                                         </StackPanel>
                                         <StackPanel Grid.Column="2" Grid.Row="0">
                                             <TextBlock Text="Host / IP" FontSize="11" Opacity="0.7" Margin="0,0,0,2"/>
-                                            <ui:TextBox Text="{Binding Settings.Host, UpdateSourceTrigger=PropertyChanged}"/>
+                                            <ui:TextBox Text="{Binding Settings.Host, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding CanEdit}"/>
                                         </StackPanel>
                                         <StackPanel Grid.Column="4" Grid.Row="0">
                                             <TextBlock Text="Port" FontSize="11" Opacity="0.7" Margin="0,0,0,2"/>
-                                            <ui:NumberBox Minimum="1" Maximum="65535" Value="{Binding Settings.Port}"/>
+                                            <ui:NumberBox Minimum="1" Maximum="65535" Value="{Binding Settings.Port}" IsEnabled="{Binding CanEdit}"/>
                                         </StackPanel>
                                         <StackPanel Grid.Column="0" Grid.Row="2">
                                             <TextBlock Text="Byte Order" FontSize="11" Opacity="0.7" Margin="0,0,0,2"/>
-                                            <ComboBox ItemsSource="{Binding ByteOrders}" SelectedItem="{Binding Settings.ByteOrder}" HorizontalAlignment="Stretch"/>
+                                            <ComboBox ItemsSource="{Binding ByteOrders}" SelectedItem="{Binding Settings.ByteOrder}" HorizontalAlignment="Stretch" IsEnabled="{Binding CanEdit}"/>
                                         </StackPanel>
                                         <StackPanel Grid.Column="2" Grid.Row="2">
                                             <TextBlock Text="Timeout (s)" FontSize="11" Opacity="0.7" Margin="0,0,0,2"/>
-                                            <ui:NumberBox Minimum="1" Maximum="300" Value="{Binding Settings.TimeoutSeconds}"/>
+                                            <ui:NumberBox Minimum="1" Maximum="300" Value="{Binding Settings.TimeoutSeconds}" IsEnabled="{Binding CanEdit}"/>
                                         </StackPanel>
                                     </Grid>
                                 </Expander>
