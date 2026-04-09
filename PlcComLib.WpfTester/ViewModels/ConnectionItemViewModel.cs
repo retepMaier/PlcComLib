@@ -3,6 +3,7 @@ using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
+using PlcComLib.Core.PlcTypes;
 using PlcComLib.Core.Events;
 using PlcComLib.DataTypes;
 using PlcComLib.Tcp;
@@ -247,11 +248,7 @@ public sealed partial class ConnectionItemViewModel(ConnectionSettings settings,
         if (Settings.SendBufferSize > 0) builder.WithSendBufferSize(Settings.SendBufferSize);
 
         foreach (var t in Settings.Telegrams)
-        {
-            var def = t.ToTelegramDefinition();
-            builder.RegisterTelegram(def);
-            LogTelegramRegistration(def);
-        }
+            RegisterTelegram(builder, t);
 
         var client = builder.Build();
         _connection = client;
@@ -288,11 +285,7 @@ public sealed partial class ConnectionItemViewModel(ConnectionSettings settings,
         if (Settings.SendBufferSize > 0) builder.WithSendBufferSize(Settings.SendBufferSize);
 
         foreach (var t in Settings.Telegrams)
-        {
-            var def = t.ToTelegramDefinition();
-            builder.RegisterTelegram(def);
-            LogTelegramRegistration(def);
-        }
+            RegisterTelegram(builder, t);
 
         var server = builder.Build();
         _connection = server;
@@ -327,11 +320,7 @@ public sealed partial class ConnectionItemViewModel(ConnectionSettings settings,
         if (Settings.SendBufferSize > 0) builder.WithSendBufferSize(Settings.SendBufferSize);
 
         foreach (var t in Settings.Telegrams)
-        {
-            var def = t.ToTelegramDefinition();
-            builder.RegisterTelegram(def);
-            LogTelegramRegistration(def);
-        }
+            RegisterTelegram(builder, t);
 
         var client = builder.Build();
         _connection = client;
@@ -365,11 +354,7 @@ public sealed partial class ConnectionItemViewModel(ConnectionSettings settings,
         if (Settings.SendBufferSize > 0) builder.WithSendBufferSize(Settings.SendBufferSize);
 
         foreach (var t in Settings.Telegrams)
-        {
-            var def = t.ToTelegramDefinition();
-            builder.RegisterTelegram(def);
-            LogTelegramRegistration(def);
-        }
+            RegisterTelegram(builder, t);
 
         var server = builder.Build();
         _connection = server;
@@ -468,9 +453,198 @@ public sealed partial class ConnectionItemViewModel(ConnectionSettings settings,
         });
     }
 
+    private void RegisterTelegram(TcpPlcClientBuilder builder, ConnectionTelegramEntry entry)
+    {
+        var def = entry.ToTelegramDefinition();
+        builder.RegisterTelegram(def);
+        ApplyFraming(def,
+            (value, offset) => builder.WithMessageId<S7Byte>(value, offset),
+            (value, offset) => builder.WithMessageId<S7SInt>(value, offset),
+            (value, offset) => builder.WithMessageId<S7Word>(value, offset),
+            (value, offset) => builder.WithMessageId<S7Int>(value, offset),
+            (value, offset) => builder.WithMessageId<S7DWord>(value, offset),
+            (value, offset) => builder.WithMessageId<S7DInt>(value, offset),
+            (value, offset) => builder.WithMessageId<S7LWord>(value, offset),
+            (value, offset) => builder.WithMessageId<S7LInt>(value, offset),
+            (value, offset) => builder.WithLength<S7Byte>(value, offset),
+            (value, offset) => builder.WithLength<S7SInt>(value, offset),
+            (value, offset) => builder.WithLength<S7Word>(value, offset),
+            (value, offset) => builder.WithLength<S7Int>(value, offset),
+            (value, offset) => builder.WithLength<S7DWord>(value, offset),
+            (value, offset) => builder.WithLength<S7DInt>(value, offset),
+            (value, offset) => builder.WithLength<S7LWord>(value, offset),
+            (value, offset) => builder.WithLength<S7LInt>(value, offset));
+        LogTelegramRegistration(def);
+    }
+
+    private void RegisterTelegram(TcpPlcServerBuilder builder, ConnectionTelegramEntry entry)
+    {
+        var def = entry.ToTelegramDefinition();
+        builder.RegisterTelegram(def);
+        ApplyFraming(def,
+            (value, offset) => builder.WithMessageId<S7Byte>(value, offset),
+            (value, offset) => builder.WithMessageId<S7SInt>(value, offset),
+            (value, offset) => builder.WithMessageId<S7Word>(value, offset),
+            (value, offset) => builder.WithMessageId<S7Int>(value, offset),
+            (value, offset) => builder.WithMessageId<S7DWord>(value, offset),
+            (value, offset) => builder.WithMessageId<S7DInt>(value, offset),
+            (value, offset) => builder.WithMessageId<S7LWord>(value, offset),
+            (value, offset) => builder.WithMessageId<S7LInt>(value, offset),
+            (value, offset) => builder.WithLength<S7Byte>(value, offset),
+            (value, offset) => builder.WithLength<S7SInt>(value, offset),
+            (value, offset) => builder.WithLength<S7Word>(value, offset),
+            (value, offset) => builder.WithLength<S7Int>(value, offset),
+            (value, offset) => builder.WithLength<S7DWord>(value, offset),
+            (value, offset) => builder.WithLength<S7DInt>(value, offset),
+            (value, offset) => builder.WithLength<S7LWord>(value, offset),
+            (value, offset) => builder.WithLength<S7LInt>(value, offset));
+        LogTelegramRegistration(def);
+    }
+
+    private void RegisterTelegram(UdpPlcClientBuilder builder, ConnectionTelegramEntry entry)
+    {
+        var def = entry.ToTelegramDefinition();
+        builder.RegisterTelegram(def);
+        ApplyFraming(def,
+            (value, offset) => builder.WithMessageId<S7Byte>(value, offset),
+            (value, offset) => builder.WithMessageId<S7SInt>(value, offset),
+            (value, offset) => builder.WithMessageId<S7Word>(value, offset),
+            (value, offset) => builder.WithMessageId<S7Int>(value, offset),
+            (value, offset) => builder.WithMessageId<S7DWord>(value, offset),
+            (value, offset) => builder.WithMessageId<S7DInt>(value, offset),
+            (value, offset) => builder.WithMessageId<S7LWord>(value, offset),
+            (value, offset) => builder.WithMessageId<S7LInt>(value, offset),
+            (value, offset) => builder.WithLength<S7Byte>(value, offset),
+            (value, offset) => builder.WithLength<S7SInt>(value, offset),
+            (value, offset) => builder.WithLength<S7Word>(value, offset),
+            (value, offset) => builder.WithLength<S7Int>(value, offset),
+            (value, offset) => builder.WithLength<S7DWord>(value, offset),
+            (value, offset) => builder.WithLength<S7DInt>(value, offset),
+            (value, offset) => builder.WithLength<S7LWord>(value, offset),
+            (value, offset) => builder.WithLength<S7LInt>(value, offset));
+        LogTelegramRegistration(def);
+    }
+
+    private void RegisterTelegram(UdpPlcServerBuilder builder, ConnectionTelegramEntry entry)
+    {
+        var def = entry.ToTelegramDefinition();
+        builder.RegisterTelegram(def);
+        ApplyFraming(def,
+            (value, offset) => builder.WithMessageId<S7Byte>(value, offset),
+            (value, offset) => builder.WithMessageId<S7SInt>(value, offset),
+            (value, offset) => builder.WithMessageId<S7Word>(value, offset),
+            (value, offset) => builder.WithMessageId<S7Int>(value, offset),
+            (value, offset) => builder.WithMessageId<S7DWord>(value, offset),
+            (value, offset) => builder.WithMessageId<S7DInt>(value, offset),
+            (value, offset) => builder.WithMessageId<S7LWord>(value, offset),
+            (value, offset) => builder.WithMessageId<S7LInt>(value, offset),
+            (value, offset) => builder.WithLength<S7Byte>(value, offset),
+            (value, offset) => builder.WithLength<S7SInt>(value, offset),
+            (value, offset) => builder.WithLength<S7Word>(value, offset),
+            (value, offset) => builder.WithLength<S7Int>(value, offset),
+            (value, offset) => builder.WithLength<S7DWord>(value, offset),
+            (value, offset) => builder.WithLength<S7DInt>(value, offset),
+            (value, offset) => builder.WithLength<S7LWord>(value, offset),
+            (value, offset) => builder.WithLength<S7LInt>(value, offset));
+        LogTelegramRegistration(def);
+    }
+
+    private void ApplyFraming(
+        TelegramDefinition def,
+        Action<long, int> useByteMessageId,
+        Action<long, int> useSIntMessageId,
+        Action<long, int> useWordMessageId,
+        Action<long, int> useIntMessageId,
+        Action<long, int> useDWordMessageId,
+        Action<long, int> useDIntMessageId,
+        Action<long, int> useLWordMessageId,
+        Action<long, int> useLIntMessageId,
+        Action<long, int> useByteLength,
+        Action<long, int> useSIntLength,
+        Action<long, int> useWordLength,
+        Action<long, int> useIntLength,
+        Action<long, int> useDWordLength,
+        Action<long, int> useDIntLength,
+        Action<long, int> useLWordLength,
+        Action<long, int> useLIntLength)
+    {
+        if (def.MessageId != 0)
+        {
+            if (!ApplyNumericFraming(def.MessageIdDataType, def.MessageId, def.MessageIdByteOffset,
+                useByteMessageId, useSIntMessageId, useWordMessageId, useIntMessageId,
+                useDWordMessageId, useDIntMessageId, useLWordMessageId, useLIntMessageId))
+            {
+                logService.Log(Models.LogLevel.Warning, DisplayName,
+                    $"Telegram '{def.Name}' uses unsupported message ID type '{def.MessageIdDataType}'.");
+            }
+        }
+
+        if (def.LengthByteOffset >= 0 && def.ConfiguredWireSize > 0)
+        {
+            if (!ApplyNumericFraming(def.LengthDataType, def.ConfiguredWireSize, def.LengthByteOffset,
+                useByteLength, useSIntLength, useWordLength, useIntLength,
+                useDWordLength, useDIntLength, useLWordLength, useLIntLength))
+            {
+                logService.Log(Models.LogLevel.Warning, DisplayName,
+                    $"Telegram '{def.Name}' uses unsupported length type '{def.LengthDataType}'.");
+            }
+        }
+    }
+
+    private static bool ApplyNumericFraming(
+        S7DataType dataType,
+        long value,
+        int offset,
+        Action<long, int> useByte,
+        Action<long, int> useSInt,
+        Action<long, int> useWord,
+        Action<long, int> useInt,
+        Action<long, int> useDWord,
+        Action<long, int> useDInt,
+        Action<long, int> useLWord,
+        Action<long, int> useLInt)
+    {
+        switch (dataType)
+        {
+            case S7DataType.Byte:
+            case S7DataType.USInt:
+                useByte(value, offset);
+                return true;
+            case S7DataType.SInt:
+                useSInt(value, offset);
+                return true;
+            case S7DataType.Word:
+            case S7DataType.UInt:
+                useWord(value, offset);
+                return true;
+            case S7DataType.Int:
+                useInt(value, offset);
+                return true;
+            case S7DataType.DWord:
+            case S7DataType.UDInt:
+                useDWord(value, offset);
+                return true;
+            case S7DataType.DInt:
+                useDInt(value, offset);
+                return true;
+            case S7DataType.LWord:
+            case S7DataType.ULInt:
+                useLWord(value, offset);
+                return true;
+            case S7DataType.LInt:
+                useLInt(value, offset);
+                return true;
+            default:
+                return false;
+        }
+    }
+
     private void LogTelegramRegistration(TelegramDefinition def)
     {
-        logService.Log(Models.LogLevel.Info, DisplayName, $"Telegram '{def.Name}' registered with length={def.ConfiguredWireSize} and id={def.MessageId}");
+        logService.Log(
+            Models.LogLevel.Info,
+            DisplayName,
+            $"Telegram '{def.Name}' registered with id={def.MessageId} ({def.MessageIdDataType} @ {def.MessageIdByteOffset}), length={def.ConfiguredWireSize} ({def.LengthDataType} @ {def.LengthByteOffset})");
     }
 
     private static byte[]? ParseHex(string hex)

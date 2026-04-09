@@ -6,14 +6,14 @@
     DispatcherUnhandledException="OnDispatcherUnhandledException">
     <Application.Resources>
         <ResourceDictionary>
+            <!-- Workaround: define accent resources before merged dictionaries so StaticResource lookups can resolve them -->
+            <Color x:Key="SystemAccentColorPrimary">#0078D4</Color>
+            <SolidColorBrush x:Key="SystemAccentColorPrimaryBrush" Color="{StaticResource SystemAccentColorPrimary}"/>
+
             <ResourceDictionary.MergedDictionaries>
                 <ui:ThemesDictionary Theme="Dark"/>
                 <ui:ControlsDictionary/>
             </ResourceDictionary.MergedDictionaries>
-
-            <!-- Workaround: Define missing resource for .NET 10 compatibility -->
-            <Color x:Key="SystemAccentColorPrimary">#0078D4</Color>
-            <SolidColorBrush x:Key="SystemAccentColorPrimaryBrush" Color="{StaticResource SystemAccentColorPrimary}"/>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

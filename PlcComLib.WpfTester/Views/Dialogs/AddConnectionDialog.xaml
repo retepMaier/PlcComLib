@@ -77,7 +77,7 @@ Foreground="{DynamicResource TextFillColorPrimaryBrush}">
                         <ui:NumberBox
                             Minimum="1"
                             Maximum="65535"
-                            Value="{Binding Port}"/>
+                            Value="{Binding Port, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                     </StackPanel>
                 </Grid>
 
@@ -98,20 +98,20 @@ Foreground="{DynamicResource TextFillColorPrimaryBrush}">
 
                     <StackPanel Grid.Column="2">
                         <TextBlock Text="Timeout (seconds)" Style="{StaticResource FieldLabel}"/>
-                        <ui:NumberBox Minimum="1" Maximum="300" Value="{Binding TimeoutSeconds}"/>
+                        <ui:NumberBox Minimum="1" Maximum="300" Value="{Binding TimeoutSeconds, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                     </StackPanel>
                 </Grid>
 
                 <!-- TCP Client specific -->
                 <StackPanel Visibility="{Binding IsTcpClient, Converter={StaticResource BoolToVis}}" Margin="0,0,0,12">
                     <TextBlock Text="Reconnect Interval (seconds)" Style="{StaticResource FieldLabel}"/>
-                    <ui:NumberBox Minimum="1" Maximum="300" Value="{Binding ReconnectIntervalSeconds}"/>
+                    <ui:NumberBox Minimum="1" Maximum="300" Value="{Binding ReconnectIntervalSeconds, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                 </StackPanel>
 
                 <!-- TCP Server specific -->
                 <StackPanel Visibility="{Binding IsTcpServer, Converter={StaticResource BoolToVis}}" Margin="0,0,0,12">
                     <TextBlock Text="Max Connections" Style="{StaticResource FieldLabel}"/>
-                    <ui:NumberBox Minimum="1" Maximum="1000" Value="{Binding MaxConnections}"/>
+                    <ui:NumberBox Minimum="1" Maximum="1000" Value="{Binding MaxConnections, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                 </StackPanel>
 
                 <!-- Advanced -->
@@ -132,12 +132,12 @@ Foreground="{DynamicResource TextFillColorPrimaryBrush}">
 
                         <StackPanel Grid.Column="2">
                             <TextBlock Text="Receive Buffer (0=default)" Style="{StaticResource FieldLabel}"/>
-                            <ui:NumberBox Minimum="0" Maximum="65535" Value="{Binding ReceiveBufferSize}"/>
+                            <ui:NumberBox Minimum="0" Maximum="65535" Value="{Binding ReceiveBufferSize, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                         </StackPanel>
 
                         <StackPanel Grid.Column="4">
                             <TextBlock Text="Send Buffer (0=default)" Style="{StaticResource FieldLabel}"/>
-                            <ui:NumberBox Minimum="0" Maximum="65535" Value="{Binding SendBufferSize}"/>
+                            <ui:NumberBox Minimum="0" Maximum="65535" Value="{Binding SendBufferSize, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                         </StackPanel>
                     </Grid>
                 </Expander>
@@ -209,7 +209,7 @@ Foreground="{DynamicResource TextFillColorPrimaryBrush}">
                                         </Grid.ColumnDefinitions>
                                         <StackPanel Grid.Column="0">
                                             <TextBlock Text="Message ID" FontSize="11" Opacity="0.7" Margin="0,0,0,2"/>
-                                            <ui:NumberBox Minimum="0" Maximum="65535" Value="{Binding MessageId}" FontSize="12"/>
+                                            <ui:NumberBox Minimum="0" Maximum="65535" Value="{Binding MessageId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" FontSize="12"/>
                                         </StackPanel>
                                         <StackPanel Grid.Column="2">
                                             <TextBlock Text="ID Field" FontSize="11" Opacity="0.7" Margin="0,0,0,2"/>
@@ -217,7 +217,7 @@ Foreground="{DynamicResource TextFillColorPrimaryBrush}">
                                         </StackPanel>
                                         <StackPanel Grid.Column="4">
                                             <TextBlock Text="Wire Length (0=auto)" FontSize="11" Opacity="0.7" Margin="0,0,0,2"/>
-                                            <ui:NumberBox Minimum="0" Maximum="65535" Value="{Binding MessageLength}" FontSize="12"/>
+                                            <ui:NumberBox Minimum="0" Maximum="65535" Value="{Binding MessageLength, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" FontSize="12"/>
                                         </StackPanel>
                                         <StackPanel Grid.Column="6">
                                             <TextBlock Text="Length Field" FontSize="11" Opacity="0.7" Margin="0,0,0,2"/>

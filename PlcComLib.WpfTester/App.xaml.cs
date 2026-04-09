@@ -4,6 +4,7 @@ using PlcComLib.WpfTester.Services;
 using PlcComLib.WpfTester.ViewModels;
 using PlcComLib.WpfTester.Views;
 using PlcComLib.WpfTester.Views.Pages;
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Threading;
 using Wpf.Ui;
@@ -63,7 +64,12 @@ public partial class App : Application
 
     private void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
     {
-        // For more info see https://docs.microsoft.com/en-us/dotnet/api/system.windows.application.dispatcherunhandledexception?view=windowsdesktop-6.0
+        Debug.WriteLine(e.Exception);
+        MessageBox.Show(
+            e.Exception.ToString(),
+            "Unhandled UI exception",
+            MessageBoxButton.OK,
+            MessageBoxImage.Error);
         e.Handled = true;
     }
 }
