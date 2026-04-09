@@ -177,36 +177,48 @@ Foreground="{DynamicResource TextFillColorPrimaryBrush}">
                 <ItemsControl ItemsSource="{Binding AvailableTelegrams}">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <Border
-                                Padding="10,8"
-                                Margin="0,0,0,4"
-                                CornerRadius="6"
-                                Background="{DynamicResource ControlFillColorDefaultBrush}">
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="*"/>
-                                    </Grid.ColumnDefinitions>
-                                    <CheckBox
-                                        Grid.Column="0"
-                                        IsChecked="{Binding IsSelected}"
-                                        VerticalAlignment="Center"
-                                        Margin="0,0,10,0"/>
-                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                        <StackPanel Orientation="Horizontal">
-                                            <TextBlock FontWeight="SemiBold" Text="{Binding Telegram.Name}"/>
-                                            <TextBlock Opacity="0.6" Margin="4,0,0,0" FontSize="12">
-                                                <Run Text="(ID: 0x"/>
-                                                <Run Text="{Binding Telegram.MessageId, StringFormat=X4}"/>
-                                                <Run Text=")"/>
-                                            </TextBlock>
+                            <Border Padding="10,8" Margin="0,0,0,4" CornerRadius="6" Background="{DynamicResource ControlFillColorDefaultBrush}">
+                                <StackPanel>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <CheckBox Grid.Column="0" IsChecked="{Binding IsSelected}" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock FontWeight="SemiBold" Text="{Binding Telegram.Name}"/>
+                                                <TextBlock Opacity="0.6" Margin="4,0,0,0" FontSize="12" FontFamily="Consolas">
+                                                    <Run Text="("/>
+                                                    <Run Text="{Binding Telegram.Fields.Count, Mode=OneWay}"/>
+                                                    <Run Text=" field(s))"/>
+                                                </TextBlock>
+                                            </StackPanel>
                                         </StackPanel>
-                                        <TextBlock FontSize="11" Opacity="0.6" FontFamily="Consolas">
-                                            <Run Text="{Binding Telegram.Fields.Count, Mode=OneWay}"/>
-                                            <Run Text=" field(s)"/>
-                                        </TextBlock>
-                                    </StackPanel>
-                                </Grid>
+                                    </Grid>
+                                    <!-- Framing fields row -->
+                                    <Grid Margin="24,6,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="8"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="8"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0">
+                                            <TextBlock Text="Message ID" FontSize="11" Opacity="0.7" Margin="0,0,0,2"/>
+                                            <ui:NumberBox Minimum="0" Maximum="65535" Value="{Binding MessageId}" FontSize="12"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="2">
+                                            <TextBlock Text="Wire Length (0=auto)" FontSize="11" Opacity="0.7" Margin="0,0,0,2"/>
+                                            <ui:NumberBox Minimum="0" Maximum="65535" Value="{Binding MessageLength}" FontSize="12"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="4">
+                                            <TextBlock Text="Length Field Offset (-1=off)" FontSize="11" Opacity="0.7" Margin="0,0,0,2"/>
+                                            <ui:NumberBox Minimum="-1" Maximum="255" Value="{Binding LengthByteOffset}" FontSize="12"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </StackPanel>
                             </Border>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>

@@ -52,6 +52,8 @@ Foreground="{DynamicResource TextFillColorPrimaryBrush}"
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
                                 </Grid.RowDefinitions>
 
                                 <!-- Card Header -->
@@ -154,9 +156,52 @@ Foreground="{DynamicResource TextFillColorPrimaryBrush}"
                                     </Grid>
                                 </Border>
 
-                                <!-- Send Telegram Section -->
+                                <!-- Edit Connection Settings -->
                                 <Expander
                                     Grid.Row="1"
+                                    Header="⚙ Connection Settings"
+                                    IsEnabled="{Binding CanEdit}"
+                                    Margin="0"
+                                    Padding="16,8">
+                                    <Grid Margin="0,8,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="8"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="8"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="8"/>
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
+                                        <StackPanel Grid.Column="0" Grid.Row="0">
+                                            <TextBlock Text="Name" FontSize="11" Opacity="0.7" Margin="0,0,0,2"/>
+                                            <ui:TextBox Text="{Binding Settings.Name, UpdateSourceTrigger=PropertyChanged}"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="2" Grid.Row="0">
+                                            <TextBlock Text="Host / IP" FontSize="11" Opacity="0.7" Margin="0,0,0,2"/>
+                                            <ui:TextBox Text="{Binding Settings.Host, UpdateSourceTrigger=PropertyChanged}"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="4" Grid.Row="0">
+                                            <TextBlock Text="Port" FontSize="11" Opacity="0.7" Margin="0,0,0,2"/>
+                                            <ui:NumberBox Minimum="1" Maximum="65535" Value="{Binding Settings.Port}"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="0" Grid.Row="2">
+                                            <TextBlock Text="Byte Order" FontSize="11" Opacity="0.7" Margin="0,0,0,2"/>
+                                            <ComboBox ItemsSource="{Binding ByteOrders}" SelectedItem="{Binding Settings.ByteOrder}" HorizontalAlignment="Stretch"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="2" Grid.Row="2">
+                                            <TextBlock Text="Timeout (s)" FontSize="11" Opacity="0.7" Margin="0,0,0,2"/>
+                                            <ui:NumberBox Minimum="1" Maximum="300" Value="{Binding Settings.TimeoutSeconds}"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </Expander>
+
+                                <!-- Send Telegram Section -->
+                                <Expander
+                                    Grid.Row="2"
                                     Header="Send Telegram"
                                     Margin="0"
                                     Padding="16,8">
@@ -176,7 +221,7 @@ Foreground="{DynamicResource TextFillColorPrimaryBrush}"
                                             Margin="0,0,8,8"
                                             ItemsSource="{Binding Settings.Telegrams}"
                                             SelectedItem="{Binding SelectedTelegram}"
-                                            DisplayMemberPath="Name"/>
+                                            DisplayMemberPath="Telegram.Name"/>
                                         <ui:Button
                                             Grid.Row="0" Grid.Column="1"
                                             Content="Send Telegram"
@@ -208,9 +253,83 @@ Foreground="{DynamicResource TextFillColorPrimaryBrush}"
                                     </Grid>
                                 </Expander>
 
+                                <!-- Registered Telegrams Section -->
+                                <Expander
+                                    Grid.Row="3"
+                                    Header="{Binding Settings.Telegrams.Count, StringFormat='Registered Telegrams ({0})'}"
+                                    Margin="0"
+                                    Padding="16,8">
+                                    <StackPanel Margin="0,8,0,0">
+                                        <ItemsControl ItemsSource="{Binding Settings.Telegrams}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate DataType="{x:Type models:ConnectionTelegramEntry}">
+                                                    <Border Padding="8,6" Margin="0,0,0,4" CornerRadius="4"
+                                                            Background="{DynamicResource ApplicationBackgroundBrush}">
+                                                        <StackPanel>
+                                                            <!-- Telegram header row -->
+                                                            <Grid>
+                                                                <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition Width="*"/>
+                                                                    <ColumnDefinition Width="Auto"/>
+                                                                </Grid.ColumnDefinitions>
+                                                                <StackPanel Grid.Column="0">
+                                                                    <TextBlock FontWeight="SemiBold" Text="{Binding Telegram.Name}"/>
+                                                                    <TextBlock FontSize="11" Opacity="0.6" FontFamily="Consolas">
+                                                                        <Run Text="ID: 0x"/>
+                                                                        <Run Text="{Binding MessageId, StringFormat=X4}"/>
+                                                                        <Run Text="  Length: "/>
+                                                                        <Run Text="{Binding MessageLength}"/>
+                                                                    </TextBlock>
+                                                                </StackPanel>
+                                                            </Grid>
+                                                            <!-- Fields with editable defaults -->
+                                                            <ItemsControl ItemsSource="{Binding Telegram.Fields}" Margin="0,4,0,0">
+                                                                <ItemsControl.ItemTemplate>
+                                                                    <DataTemplate DataType="{x:Type models:TelegramFieldDefinition}">
+                                                                        <Grid Margin="0,2">
+                                                                            <Grid.ColumnDefinitions>
+                                                                                <ColumnDefinition Width="120"/>
+                                                                                <ColumnDefinition Width="80"/>
+                                                                                <ColumnDefinition Width="8"/>
+                                                                                <ColumnDefinition Width="*"/>
+                                                                            </Grid.ColumnDefinitions>
+                                                                            <TextBlock Grid.Column="0" Text="{Binding Name}" FontFamily="Consolas" FontSize="11" VerticalAlignment="Center"/>
+                                                                            <TextBlock Grid.Column="1" Text="{Binding DataType}" FontFamily="Consolas" FontSize="11" VerticalAlignment="Center" Opacity="0.6"/>
+                                                                            <TextBox Grid.Column="3"
+                                                                                     Text="{Binding DefaultValue, UpdateSourceTrigger=PropertyChanged}"
+                                                                                     FontFamily="Consolas"
+                                                                                     FontSize="11"
+                                                                                     Padding="4,2"
+                                                                                     VerticalContentAlignment="Center"
+                                                                                     IsEnabled="{Binding DataContext.CanEdit, RelativeSource={RelativeSource AncestorType=ItemsControl, AncestorLevel=2}}"/>
+                                                                        </Grid>
+                                                                    </DataTemplate>
+                                                                </ItemsControl.ItemTemplate>
+                                                            </ItemsControl>
+                                                        </StackPanel>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                        <TextBlock Text="No telegrams registered for this connection." Opacity="0.5" FontStyle="Italic"
+                                                   Margin="0,4,0,0">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding Settings.Telegrams.Count}" Value="0">
+                                                            <Setter Property="Visibility" Value="Visible"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                    </StackPanel>
+                                </Expander>
+
                                 <!-- Messages Section -->
                                 <Expander
-                                    Grid.Row="2"
+                                    Grid.Row="4"
                                     Header="{Binding Messages.Count, StringFormat='Messages ({0})'}"
                                     Margin="0"
                                     Padding="16,8">
