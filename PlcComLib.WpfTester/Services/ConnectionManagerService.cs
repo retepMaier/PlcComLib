@@ -1,9 +1,6 @@
-using System.Collections.ObjectModel;
-using Microsoft.Extensions.Logging;
-using PlcComLib.Tcp;
-using PlcComLib.Udp;
 using PlcComLib.WpfTester.Models;
 using PlcComLib.WpfTester.ViewModels;
+using System.Collections.ObjectModel;
 
 namespace PlcComLib.WpfTester.Services;
 
