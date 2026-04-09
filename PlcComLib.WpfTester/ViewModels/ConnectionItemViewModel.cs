@@ -247,7 +247,11 @@ public sealed partial class ConnectionItemViewModel(ConnectionSettings settings,
         if (Settings.SendBufferSize > 0) builder.WithSendBufferSize(Settings.SendBufferSize);
 
         foreach (var t in Settings.Telegrams)
-            builder.RegisterTelegram(t.ToTelegramDefinition());
+        {
+            var def = t.ToTelegramDefinition();
+            builder.RegisterTelegram(def);
+            LogTelegramRegistration(def);
+        }
 
         var client = builder.Build();
         _connection = client;
@@ -284,7 +288,11 @@ public sealed partial class ConnectionItemViewModel(ConnectionSettings settings,
         if (Settings.SendBufferSize > 0) builder.WithSendBufferSize(Settings.SendBufferSize);
 
         foreach (var t in Settings.Telegrams)
-            builder.RegisterTelegram(t.ToTelegramDefinition());
+        {
+            var def = t.ToTelegramDefinition();
+            builder.RegisterTelegram(def);
+            LogTelegramRegistration(def);
+        }
 
         var server = builder.Build();
         _connection = server;
@@ -319,7 +327,11 @@ public sealed partial class ConnectionItemViewModel(ConnectionSettings settings,
         if (Settings.SendBufferSize > 0) builder.WithSendBufferSize(Settings.SendBufferSize);
 
         foreach (var t in Settings.Telegrams)
-            builder.RegisterTelegram(t.ToTelegramDefinition());
+        {
+            var def = t.ToTelegramDefinition();
+            builder.RegisterTelegram(def);
+            LogTelegramRegistration(def);
+        }
 
         var client = builder.Build();
         _connection = client;
@@ -353,7 +365,11 @@ public sealed partial class ConnectionItemViewModel(ConnectionSettings settings,
         if (Settings.SendBufferSize > 0) builder.WithSendBufferSize(Settings.SendBufferSize);
 
         foreach (var t in Settings.Telegrams)
-            builder.RegisterTelegram(t.ToTelegramDefinition());
+        {
+            var def = t.ToTelegramDefinition();
+            builder.RegisterTelegram(def);
+            LogTelegramRegistration(def);
+        }
 
         var server = builder.Build();
         _connection = server;
@@ -450,6 +466,11 @@ public sealed partial class ConnectionItemViewModel(ConnectionSettings settings,
             while (Messages.Count > 50)
                 Messages.RemoveAt(0);
         });
+    }
+
+    private void LogTelegramRegistration(TelegramDefinition def)
+    {
+        logService.Log(Models.LogLevel.Info, DisplayName, $"Telegram '{def.Name}' registered with length={def.ConfiguredWireSize} and id={def.MessageId}");
     }
 
     private static byte[]? ParseHex(string hex)
