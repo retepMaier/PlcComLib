@@ -22,12 +22,6 @@ public sealed partial class TelegramsPageViewModel(ITelegramLibraryService teleg
 
     [ObservableProperty] public partial string NewTelegramName { get; set; } = string.Empty;
 
-    [ObservableProperty] public partial long NewTelegramMessageId { get; set; } = 0;
-
-    [ObservableProperty] public partial int NewTelegramMessageIdOffset { get; set; } = 0;
-
-    [ObservableProperty] public partial S7DataType NewTelegramMessageIdType { get; set; } = S7DataType.Word;
-
     [ObservableProperty] public partial string NewFieldName { get; set; } = string.Empty;
 
     [ObservableProperty]
@@ -50,19 +44,11 @@ public sealed partial class TelegramsPageViewModel(ITelegramLibraryService teleg
     private void AddTelegram()
     {
         if (string.IsNullOrWhiteSpace(NewTelegramName)) return;
-        var t = new TelegramDefinitionModel
-        {
-            Name = NewTelegramName,
-            MessageId = NewTelegramMessageId,
-            MessageIdByteOffset = NewTelegramMessageIdOffset,
-            MessageIdDataType = NewTelegramMessageIdType,
-        };
+        var t = new TelegramDefinitionModel { Name = NewTelegramName };
         telegramLibrary.Add(t);
         SelectedTelegram = t;
         CurrentTelegramFields.Clear();
         NewTelegramName = string.Empty;
-        NewTelegramMessageId = 0;
-        NewTelegramMessageIdOffset = 0;
     }
 
     [RelayCommand]

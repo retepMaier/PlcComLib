@@ -71,10 +71,10 @@ public sealed partial class AddConnectionDialogViewModel : ObservableObject
             NoDelay = NoDelay,
             ReceiveBufferSize = ReceiveBufferSize,
             SendBufferSize = SendBufferSize,
-            Telegrams = AvailableTelegrams
-                .Where(t => t.IsSelected)
-                .Select(t => t.Telegram.DeepCopy())
-                .ToList(),
+            Telegrams = new System.Collections.ObjectModel.ObservableCollection<ConnectionTelegramEntry>(
+                AvailableTelegrams
+                    .Where(t => t.IsSelected)
+                    .Select(t => t.ToConnectionTelegramEntry())),
         };
     }
 }

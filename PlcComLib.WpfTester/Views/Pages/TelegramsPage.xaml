@@ -84,31 +84,10 @@
                         <Grid Margin="0,0,0,8">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="12"/>
-                                <ColumnDefinition Width="120"/>
-                                <ColumnDefinition Width="12"/>
-                                <ColumnDefinition Width="120"/>
-                                <ColumnDefinition Width="12"/>
-                                <ColumnDefinition Width="120"/>
                             </Grid.ColumnDefinitions>
                             <StackPanel Grid.Column="0">
                                 <TextBlock Text="Name" Style="{StaticResource FieldLabel}"/>
                                 <ui:TextBox PlaceholderText="e.g. HeartbeatMsg" Text="{Binding NewTelegramName, UpdateSourceTrigger=PropertyChanged}"/>
-                            </StackPanel>
-                            <StackPanel Grid.Column="2">
-                                <TextBlock Text="Message ID" Style="{StaticResource FieldLabel}"/>
-                                <ui:NumberBox Minimum="0" Maximum="65535" Value="{Binding NewTelegramMessageId}"/>
-                            </StackPanel>
-                            <StackPanel Grid.Column="4">
-                                <TextBlock Text="ID Offset" Style="{StaticResource FieldLabel}"/>
-                                <ui:NumberBox Minimum="0" Maximum="255" Value="{Binding NewTelegramMessageIdOffset}"/>
-                            </StackPanel>
-                            <StackPanel Grid.Column="6">
-                                <TextBlock Text="ID Type" Style="{StaticResource FieldLabel}"/>
-                                <ComboBox
-                                    ItemsSource="{Binding DataTypes}"
-                                    SelectedItem="{Binding NewTelegramMessageIdType}"
-                                    HorizontalAlignment="Stretch"/>
                             </StackPanel>
                         </Grid>
                         <ui:Button
@@ -133,20 +112,10 @@
                                                 <ColumnDefinition Width="Auto"/>
                                             </Grid.ColumnDefinitions>
                                             <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                                <StackPanel Orientation="Horizontal">
-                                                    <TextBlock FontWeight="SemiBold" FontSize="13" Text="{Binding Name}"/>
-                                                    <TextBlock FontSize="13" Opacity="0.6" Margin="4,0,0,0">
-                                                        <Run Text=" (ID: 0x"/>
-                                                        <Run Text="{Binding MessageId, StringFormat=X4}"/>
-                                                        <Run Text=")"/>
-                                                    </TextBlock>
-                                                </StackPanel>
+                                                <TextBlock FontWeight="SemiBold" FontSize="13" Text="{Binding Name}"/>
                                                 <TextBlock FontSize="11" Opacity="0.6" FontFamily="Consolas">
                                                     <Run Text="{Binding Fields.Count, Mode=OneWay}"/>
-                                                    <Run Text=" field(s)  ·  Offset: "/>
-                                                    <Run Text="{Binding MessageIdByteOffset}"/>
-                                                    <Run Text="  ·  Type: "/>
-                                                    <Run Text="{Binding MessageIdDataType}"/>
+                                                    <Run Text=" field(s)"/>
                                                 </TextBlock>
                                             </StackPanel>
                                             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
