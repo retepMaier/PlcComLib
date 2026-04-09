@@ -11,7 +11,7 @@ namespace PlcComLib.Udp;
 /// <summary>
 /// UDP server that listens on a local endpoint and dispatches incoming datagrams. Thread-safe.
 /// </summary>
-public sealed class UdpPlcServer(
+public sealed partial class UdpPlcServer(
     ConnectionConfiguration config,
     TelegramRegistry registry,
     ILogger<UdpPlcServer>? logger = null,
@@ -71,7 +71,7 @@ public sealed class UdpPlcServer(
         _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _isConnected = true;
         ConnectionStateChanged?.Invoke(this, new ConnectionStateChangedEventArgs(true, "UDP server started"));
-        logger?.LogInformation("UDP server listening on {Host}:{Port}", _config.Host, _config.Port);
+        LogServerListening(logger, _config.Host, _config.Port);
         _receiveTask = ReceiveLoopAsync(_cts.Token);
         return Task.CompletedTask;
     }
@@ -169,7 +169,7 @@ public sealed class UdpPlcServer(
             var def = T.Definition;
             if (!MatchesMessageId(e.RawPayload, def)) return;
             try   { handler(T.Deserialize(e.RawPayload, byteOrder)); }
-            catch (Exception ex) { logger?.LogWarning(ex, "Typed handler for {T} threw.", typeof(T).Name); }
+            catch (Exception ex) { LogTypedHandlerThrew(logger, ex, typeof(T).Name); }
         };
         TelegramReceived += listener;
         return new Subscription(() => TelegramReceived -= listener);
@@ -188,7 +188,7 @@ public sealed class UdpPlcServer(
             var def = T.Definition;
             if (!MatchesMessageId(e.RawPayload, def)) return;
             try   { handler(T.Deserialize(e.RawPayload, byteOrder), e.RemoteAddress, e.Port); }
-            catch (Exception ex) { logger?.LogWarning(ex, "Typed handler for {T} threw.", typeof(T).Name); }
+            catch (Exception ex) { LogTypedHandlerThrew(logger, ex, typeof(T).Name); }
         };
         TelegramReceived += listener;
         return new Subscription(() => TelegramReceived -= listener);
@@ -205,7 +205,7 @@ public sealed class UdpPlcServer(
             catch (OperationCanceledException) { break; }
             catch (Exception ex)
             {
-                logger?.LogWarning(ex, "UDP receive error.");
+                LogUdpReceiveError(logger, ex);
                 break;
             }
             _lastSenderEndpoint = result.RemoteEndPoint;
@@ -244,9 +244,7 @@ public sealed class UdpPlcServer(
         }
 
         // 3. No match — raise UnknownTelegramReceived
-        logger?.LogWarning(
-            "No matching UDP telegram definition for payload of {Length} bytes.",
-            payload.Length);
+        LogNoMatchingUdpDefinition(logger, payload.Length);
         UnknownTelegramReceived?.Invoke(this, new UnknownTelegramEventArgs(payload, byteOrder));
     }
 
@@ -263,9 +261,7 @@ public sealed class UdpPlcServer(
         int fieldEnd = def.LengthByteOffset + S7TypeConverter.GetWireSize(def.LengthDataType);
         if (payload.Length < fieldEnd)
         {
-            logger?.LogWarning(
-                "UDP telegram '{Id}': length field at offset {Offset} extends beyond payload ({PayloadLen} bytes).",
-                def.Id, def.LengthByteOffset, payload.Length);
+            LogUdpLengthFieldBeyondPayload(logger, def.Id, def.LengthByteOffset, payload.Length);
             UnknownTelegramReceived?.Invoke(this, new UnknownTelegramEventArgs(payload, byteOrder));
             return false;
         }
@@ -273,9 +269,7 @@ public sealed class UdpPlcServer(
         long receivedLength = TelegramIdFramer.ReadLength(payload, def.LengthByteOffset, def.LengthDataType, byteOrder);
         if (receivedLength != def.ConfiguredWireSize)
         {
-            logger?.LogWarning(
-                "UDP telegram '{Id}': length field mismatch — expected {Expected}, got {Received}.",
-                def.Id, def.ConfiguredWireSize, receivedLength);
+            LogUdpLengthFieldMismatch(logger, def.Id, def.ConfiguredWireSize, receivedLength);
             UnknownTelegramReceived?.Invoke(this, new UnknownTelegramEventArgs(payload, byteOrder));
             return false;
         }
@@ -292,7 +286,7 @@ public sealed class UdpPlcServer(
         }
         catch (Exception ex)
         {
-            logger?.LogWarning(ex, "Failed to deserialize UDP telegram '{Id}'.", def.Id);
+            LogUdpDeserializeFailed(logger, ex, def.Id);
         }
     }
 
