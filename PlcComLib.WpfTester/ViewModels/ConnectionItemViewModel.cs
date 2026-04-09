@@ -250,7 +250,7 @@ public sealed partial class ConnectionItemViewModel(ConnectionSettings settings,
         {
             var def = t.ToTelegramDefinition();
             builder.RegisterTelegram(def);
-            logService.Log(Models.LogLevel.Info, DisplayName, $"Telegram '{def.Name}' registered with length={def.ConfiguredWireSize} and id={def.MessageId}");
+            LogTelegramRegistration(def);
         }
 
         var client = builder.Build();
@@ -291,7 +291,7 @@ public sealed partial class ConnectionItemViewModel(ConnectionSettings settings,
         {
             var def = t.ToTelegramDefinition();
             builder.RegisterTelegram(def);
-            logService.Log(Models.LogLevel.Info, DisplayName, $"Telegram '{def.Name}' registered with length={def.ConfiguredWireSize} and id={def.MessageId}");
+            LogTelegramRegistration(def);
         }
 
         var server = builder.Build();
@@ -330,7 +330,7 @@ public sealed partial class ConnectionItemViewModel(ConnectionSettings settings,
         {
             var def = t.ToTelegramDefinition();
             builder.RegisterTelegram(def);
-            logService.Log(Models.LogLevel.Info, DisplayName, $"Telegram '{def.Name}' registered with length={def.ConfiguredWireSize} and id={def.MessageId}");
+            LogTelegramRegistration(def);
         }
 
         var client = builder.Build();
@@ -368,7 +368,7 @@ public sealed partial class ConnectionItemViewModel(ConnectionSettings settings,
         {
             var def = t.ToTelegramDefinition();
             builder.RegisterTelegram(def);
-            logService.Log(Models.LogLevel.Info, DisplayName, $"Telegram '{def.Name}' registered with length={def.ConfiguredWireSize} and id={def.MessageId}");
+            LogTelegramRegistration(def);
         }
 
         var server = builder.Build();
@@ -466,6 +466,11 @@ public sealed partial class ConnectionItemViewModel(ConnectionSettings settings,
             while (Messages.Count > 50)
                 Messages.RemoveAt(0);
         });
+    }
+
+    private void LogTelegramRegistration(TelegramDefinition def)
+    {
+        logService.Log(Models.LogLevel.Info, DisplayName, $"Telegram '{def.Name}' registered with length={def.ConfiguredWireSize} and id={def.MessageId}");
     }
 
     private static byte[]? ParseHex(string hex)
