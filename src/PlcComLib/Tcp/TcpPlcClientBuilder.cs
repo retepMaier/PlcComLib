@@ -18,7 +18,7 @@ public sealed class TcpPlcClientBuilder
     private TimeSpan _timeout = TimeSpan.FromSeconds(10);
     private IMessageFramer? _framer;
     private bool _useLengthFramer;
-    private ILogger<TcpPlcClient>? _logger;
+    private ILogger? _logger;
     private readonly TelegramRegistry _registry = new();
     private ByteOrder _byteOrder = ByteOrder.BigEndian;
     private TelegramDefinition? _lastRegisteredDef;
@@ -90,7 +90,7 @@ public sealed class TcpPlcClientBuilder
     }
 
     /// <summary>Attaches a <see cref="ILogger{TCategoryName}"/> for structured diagnostic output.</summary>
-    public TcpPlcClientBuilder WithLogger(ILogger<TcpPlcClient> logger)
+    public TcpPlcClientBuilder WithLogger(ILogger logger)
     {
         _logger = logger;
         return this;

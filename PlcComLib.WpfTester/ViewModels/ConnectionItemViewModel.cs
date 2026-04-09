@@ -232,6 +232,7 @@ public sealed partial class ConnectionItemViewModel(ConnectionSettings settings,
         var builder = new TcpPlcClientBuilder()
             .ConnectTo(Settings.Host, Settings.Port)
             .WithByteOrder(Settings.ByteOrder)
+            .WithLogger(logger)
             .WithTimeout(TimeSpan.FromSeconds(Settings.TimeoutSeconds))
             .WithReconnectInterval(TimeSpan.FromSeconds(Settings.ReconnectIntervalSeconds))            
             .WithNoDelay(Settings.NoDelay);

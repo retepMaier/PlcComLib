@@ -16,7 +16,7 @@ namespace PlcComLib.Tcp;
 public sealed partial class TcpPlcClient(
     ConnectionConfiguration config,
     TelegramRegistry registry,
-    ILogger<TcpPlcClient>? logger = null,
+    ILogger? logger = null,
     ByteOrder byteOrder = ByteOrder.BigEndian) : IPlcConnection
 {
     private readonly ConnectionConfiguration _config = config ?? throw new ArgumentNullException(nameof(config));
