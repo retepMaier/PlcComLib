@@ -3,7 +3,7 @@ using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
-using PlcComLib.Core;
+using PlcComLib.Core.Events;
 using PlcComLib.DataTypes;
 using PlcComLib.Tcp;
 using PlcComLib.Telegrams;
@@ -32,7 +32,15 @@ public sealed partial class ConnectionItemViewModel(ConnectionSettings settings,
 
     [ObservableProperty] public partial string SendHex { get; set; } = string.Empty;
 
-    [ObservableProperty] public partial TelegramDefinitionModel? SelectedTelegram { get; set; }
+    [ObservableProperty] public partial ConnectionTelegramEntry? SelectedTelegram { get; set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanEdit))]
+    public partial bool IsEditing { get; set; }
+
+    public bool CanEdit => !IsConnected && !IsBusy;
+
+    public IReadOnlyList<ByteOrder> ByteOrders { get; } = Enum.GetValues<ByteOrder>();
     public ConnectionSettings Settings { get; } = settings;
     public string DisplayName => string.IsNullOrWhiteSpace(Settings.Name)
         ? $"{Settings.Type} {Settings.Host}:{Settings.Port}"
@@ -101,7 +109,7 @@ public sealed partial class ConnectionItemViewModel(ConnectionSettings settings,
         {
             var def = SelectedTelegram.ToTelegramDefinition();
             var telegram = new Telegram(def);
-            foreach (var field in SelectedTelegram.Fields)
+            foreach (var field in SelectedTelegram.Telegram.Fields)
             {
                 if (string.IsNullOrEmpty(field.DefaultValue)) continue;
                 var value = ParseDefaultValue(field.DefaultValue, field.DataType);
@@ -114,6 +122,24 @@ public sealed partial class ConnectionItemViewModel(ConnectionSettings settings,
         {
             logService.Log(Models.LogLevel.Error, DisplayName, $"Send failed: {ex.Message}");
         }
+    }
+
+    [RelayCommand]
+    public void ToggleEdit()
+    {
+        if (!CanEdit && !IsEditing) return;
+        IsEditing = !IsEditing;
+    }
+
+    partial void OnIsConnectedChanged(bool value)
+    {
+        OnPropertyChanged(nameof(CanEdit));
+        if (value) IsEditing = false;
+    }
+
+    partial void OnIsBusyChanged(bool value)
+    {
+        OnPropertyChanged(nameof(CanEdit));
     }
 
     private static object? ParseDefaultValue(string text, S7DataType dataType)

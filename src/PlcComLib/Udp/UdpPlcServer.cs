@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Sockets;
 using Microsoft.Extensions.Logging;
 using PlcComLib.Core;
+using PlcComLib.Core.Events;
 using PlcComLib.DataTypes;
 using PlcComLib.Framing;
 using PlcComLib.Telegrams;
