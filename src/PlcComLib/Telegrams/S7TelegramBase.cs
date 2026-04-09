@@ -43,9 +43,7 @@ public abstract class S7TelegramBase<TSelf> : ITypedS7Telegram<TSelf>
     /// Deserialises a telegram from raw wire bytes.
     /// Delegates to the pre-compiled plan in <see cref="S7TelegramReflector{TSelf}"/>.
     /// </summary>
-    public static TSelf Deserialize(
-        ReadOnlySpan<byte> data,
-        ByteOrder byteOrder = ByteOrder.BigEndian)
+    public static TSelf Deserialize(ReadOnlySpan<byte> data,ByteOrder byteOrder = ByteOrder.BigEndian)
         => S7TelegramReflector<TSelf>.Deserialize(data, byteOrder);
 
     // ── Instance members ──────────────────────────────────────────────────────

@@ -25,15 +25,15 @@ internal static class S7TelegramReflector<T> where T : class, new()
     static S7TelegramReflector()
     {
         (_plan, WireSize) = BuildPlan(typeof(T));
-        Definition        = BuildDefinition();
+        Definition = BuildDefinition();
     }
 
     // ── Public API ────────────────────────────────────────────────────────────
 
     internal static byte[] Serialize(T telegram, DataTypes.ByteOrder byteOrder)
     {
-        bool le  = byteOrder == DataTypes.ByteOrder.LittleEndian;
-        var  buf = new byte[WireSize];
+        bool le = byteOrder == DataTypes.ByteOrder.LittleEndian;
+        var buf = new byte[WireSize];
         foreach (var p in _plan)
             p.Serialize(telegram, buf, p.Offset, le);
         return buf;
@@ -45,8 +45,8 @@ internal static class S7TelegramReflector<T> where T : class, new()
             throw new ArgumentException(
                 $"Buffer too short for {typeof(T).Name}: expected {WireSize} bytes, got {data.Length}.");
 
-        bool le  = byteOrder == DataTypes.ByteOrder.LittleEndian;
-        var  obj = new T();
+        bool le = byteOrder == DataTypes.ByteOrder.LittleEndian;
+        var obj = new T();
 
         // Rent a byte[] so the field delegates can use spans without unsafe code.
         byte[] rented = ArrayPool<byte>.Shared.Rent(data.Length);
@@ -82,22 +82,22 @@ internal static class S7TelegramReflector<T> where T : class, new()
 
         // Build S7FieldDescriptors and compute PLC-aligned layout
         var descriptors = new DataTypes.S7FieldDescriptor[props.Length];
-        var propMeta    = new (S7DataType DataType, int WireSize, int MaxLength)[props.Length];
+        var propMeta = new (S7DataType DataType, int WireSize, int MaxLength)[props.Length];
 
         for (int i = 0; i < props.Length; i++)
         {
-            var propType   = props[i].PropertyType;
-            var dataType   = (S7DataType)propType.GetProperty("DataType",  BindingFlags.Static | BindingFlags.Public)!.GetValue(null)!;
-            var wireSize   = (int)       propType.GetProperty("WireSize",  BindingFlags.Static | BindingFlags.Public)!.GetValue(null)!;
-            var maxLenProp =             propType.GetProperty("MaxLength", BindingFlags.Static | BindingFlags.Public);
-            int maxLength  = maxLenProp is not null ? (int)maxLenProp.GetValue(null)! : 0;
+            var propType = props[i].PropertyType;
+            var dataType = (S7DataType)propType.GetProperty("DataType", BindingFlags.Static | BindingFlags.Public)!.GetValue(null)!;
+            var wireSize = (int)propType.GetProperty("WireSize", BindingFlags.Static | BindingFlags.Public)!.GetValue(null)!;
+            var maxLenProp = propType.GetProperty("MaxLength", BindingFlags.Static | BindingFlags.Public);
+            int maxLength = maxLenProp is not null ? (int)maxLenProp.GetValue(null)! : 0;
 
             descriptors[i] = new DataTypes.S7FieldDescriptor(props[i].Name, dataType, wireSize);
-            propMeta[i]    = (dataType, wireSize, maxLength);
+            propMeta[i] = (dataType, wireSize, maxLength);
         }
 
         var layout = DataTypes.S7Layout.Compute(descriptors);
-        var plans  = new List<FieldPlan>(props.Length);
+        var plans = new List<FieldPlan>(props.Length);
 
         for (int i = 0; i < props.Length; i++)
         {
@@ -106,13 +106,13 @@ internal static class S7TelegramReflector<T> where T : class, new()
             var (ser, deser) = CreateDelegates(props[i], dataType, wireSize, maxLength, fieldLayout.BitIndex);
 
             plans.Add(new FieldPlan(
-                Name:       props[i].Name,
-                DataType:   dataType,
-                WireSize:   wireSize,
-                Offset:     fieldLayout.PlcOffset,
-                BitIndex:   fieldLayout.BitIndex,
-                MaxLength:  maxLength,
-                Serialize:  ser,
+                Name: props[i].Name,
+                DataType: dataType,
+                WireSize: wireSize,
+                Offset: fieldLayout.PlcOffset,
+                BitIndex: fieldLayout.BitIndex,
+                MaxLength: maxLength,
+                Serialize: ser,
                 Deserialize: deser));
         }
 
@@ -121,20 +121,20 @@ internal static class S7TelegramReflector<T> where T : class, new()
 
     private static TelegramDefinition BuildDefinition() => new()
     {
-        Id                 = typeof(T).Name,
+        Id = typeof(T).Name,
         ConfiguredWireSize = WireSize,
-        Fields             = _plan.Select(static p => new TelegramField
+        Fields = _plan.Select(static p => new TelegramField
         {
-            Name            = p.Name,
-            DataType        = p.DataType,
+            Name = p.Name,
+            DataType = p.DataType,
             MaxStringLength = p.DataType is S7DataType.S7String or S7DataType.S7WString
                                   ? (byte)Math.Min(p.MaxLength, 254)
                                   : (byte)0,
-            RawByteCount    = p.DataType is S7DataType.Raw or S7DataType.CharArray
+            RawByteCount = p.DataType is S7DataType.Raw or S7DataType.CharArray
                                   ? p.WireSize
                                   : 0,
-            PlcOffset       = p.Offset,
-            BitIndex        = p.BitIndex,
+            PlcOffset = p.Offset,
+            BitIndex = p.BitIndex,
         }).ToList(),
     };
 
@@ -150,254 +150,254 @@ internal static class S7TelegramReflector<T> where T : class, new()
         {
             // ── 1-byte ───────────────────────────────────────────────────────
             case S7DataType.Bool:
-            {
-                int bi = bitIndex; // captured closure variable — preserves delegate signature
-                var get = CompileGetter<bool>(prop);
-                var set = CompileSetter<bool>(prop);
-                ser   = (inst, buf, off, _)  => buf[off] |= get(inst) ? (byte)(1 << bi) : (byte)0;
-                deser = (inst, buf, off, _)  => set(inst, (buf[off] & (1 << bi)) != 0);
-                break;
-            }
+                {
+                    int bi = bitIndex; // captured closure variable — preserves delegate signature
+                    var get = CompileGetter<bool>(prop);
+                    var set = CompileSetter<bool>(prop);
+                    ser = (inst, buf, off, _) => buf[off] |= get(inst) ? (byte)(1 << bi) : (byte)0;
+                    deser = (inst, buf, off, _) => set(inst, (buf[off] & (1 << bi)) != 0);
+                    break;
+                }
             case S7DataType.Byte:
             case S7DataType.USInt:
-            {
-                var get = CompileGetter<byte>(prop);
-                var set = CompileSetter<byte>(prop);
-                ser   = (inst, buf, off, _) => buf[off] = get(inst);
-                deser = (inst, buf, off, _) => set(inst, buf[off]);
-                break;
-            }
+                {
+                    var get = CompileGetter<byte>(prop);
+                    var set = CompileSetter<byte>(prop);
+                    ser = (inst, buf, off, _) => buf[off] = get(inst);
+                    deser = (inst, buf, off, _) => set(inst, buf[off]);
+                    break;
+                }
             case S7DataType.SInt:
-            {
-                var get = CompileGetter<sbyte>(prop);
-                var set = CompileSetter<sbyte>(prop);
-                ser   = (inst, buf, off, _) => buf[off] = unchecked((byte)get(inst));
-                deser = (inst, buf, off, _) => set(inst, (sbyte)buf[off]);
-                break;
-            }
+                {
+                    var get = CompileGetter<sbyte>(prop);
+                    var set = CompileSetter<sbyte>(prop);
+                    ser = (inst, buf, off, _) => buf[off] = unchecked((byte)get(inst));
+                    deser = (inst, buf, off, _) => set(inst, (sbyte)buf[off]);
+                    break;
+                }
             case S7DataType.Char:
-            {
-                var get = CompileGetter<char>(prop);
-                var set = CompileSetter<char>(prop);
-                ser   = (inst, buf, off, _) => buf[off] = (byte)get(inst);
-                deser = (inst, buf, off, _) => set(inst, (char)buf[off]);
-                break;
-            }
+                {
+                    var get = CompileGetter<char>(prop);
+                    var set = CompileSetter<char>(prop);
+                    ser = (inst, buf, off, _) => buf[off] = (byte)get(inst);
+                    deser = (inst, buf, off, _) => set(inst, (char)buf[off]);
+                    break;
+                }
 
             // ── 2-byte ───────────────────────────────────────────────────────
             case S7DataType.Word:
             case S7DataType.UInt:
-            {
-                var get = CompileGetter<ushort>(prop);
-                var set = CompileSetter<ushort>(prop);
-                ser = (inst, buf, off, le) =>
                 {
-                    if (le) BinaryPrimitives.WriteUInt16LittleEndian(buf.AsSpan(off, 2), get(inst));
-                    else    BinaryPrimitives.WriteUInt16BigEndian   (buf.AsSpan(off, 2), get(inst));
-                };
-                deser = (inst, buf, off, le) => set(inst,
-                    le ? BinaryPrimitives.ReadUInt16LittleEndian(buf.AsSpan(off, 2))
-                       : BinaryPrimitives.ReadUInt16BigEndian   (buf.AsSpan(off, 2)));
-                break;
-            }
+                    var get = CompileGetter<ushort>(prop);
+                    var set = CompileSetter<ushort>(prop);
+                    ser = (inst, buf, off, le) =>
+                    {
+                        if (le) BinaryPrimitives.WriteUInt16LittleEndian(buf.AsSpan(off, 2), get(inst));
+                        else BinaryPrimitives.WriteUInt16BigEndian(buf.AsSpan(off, 2), get(inst));
+                    };
+                    deser = (inst, buf, off, le) => set(inst,
+                        le ? BinaryPrimitives.ReadUInt16LittleEndian(buf.AsSpan(off, 2))
+                           : BinaryPrimitives.ReadUInt16BigEndian(buf.AsSpan(off, 2)));
+                    break;
+                }
             case S7DataType.Int:
             case S7DataType.Date:
-            {
-                var get = CompileGetter<short>(prop);
-                var set = CompileSetter<short>(prop);
-                ser = (inst, buf, off, le) =>
                 {
-                    if (le) BinaryPrimitives.WriteInt16LittleEndian(buf.AsSpan(off, 2), get(inst));
-                    else    BinaryPrimitives.WriteInt16BigEndian   (buf.AsSpan(off, 2), get(inst));
-                };
-                deser = (inst, buf, off, le) => set(inst,
-                    le ? BinaryPrimitives.ReadInt16LittleEndian(buf.AsSpan(off, 2))
-                       : BinaryPrimitives.ReadInt16BigEndian   (buf.AsSpan(off, 2)));
-                break;
-            }
+                    var get = CompileGetter<short>(prop);
+                    var set = CompileSetter<short>(prop);
+                    ser = (inst, buf, off, le) =>
+                    {
+                        if (le) BinaryPrimitives.WriteInt16LittleEndian(buf.AsSpan(off, 2), get(inst));
+                        else BinaryPrimitives.WriteInt16BigEndian(buf.AsSpan(off, 2), get(inst));
+                    };
+                    deser = (inst, buf, off, le) => set(inst,
+                        le ? BinaryPrimitives.ReadInt16LittleEndian(buf.AsSpan(off, 2))
+                           : BinaryPrimitives.ReadInt16BigEndian(buf.AsSpan(off, 2)));
+                    break;
+                }
             case S7DataType.WChar:
-            {
-                var get = CompileGetter<char>(prop);
-                var set = CompileSetter<char>(prop);
-                ser = (inst, buf, off, le) =>
                 {
-                    ushort v = (ushort)get(inst);
-                    if (le) BinaryPrimitives.WriteUInt16LittleEndian(buf.AsSpan(off, 2), v);
-                    else    BinaryPrimitives.WriteUInt16BigEndian   (buf.AsSpan(off, 2), v);
-                };
-                deser = (inst, buf, off, le) => set(inst,
-                    (char)(le ? BinaryPrimitives.ReadUInt16LittleEndian(buf.AsSpan(off, 2))
-                               : BinaryPrimitives.ReadUInt16BigEndian   (buf.AsSpan(off, 2))));
-                break;
-            }
+                    var get = CompileGetter<char>(prop);
+                    var set = CompileSetter<char>(prop);
+                    ser = (inst, buf, off, le) =>
+                    {
+                        ushort v = (ushort)get(inst);
+                        if (le) BinaryPrimitives.WriteUInt16LittleEndian(buf.AsSpan(off, 2), v);
+                        else BinaryPrimitives.WriteUInt16BigEndian(buf.AsSpan(off, 2), v);
+                    };
+                    deser = (inst, buf, off, le) => set(inst,
+                        (char)(le ? BinaryPrimitives.ReadUInt16LittleEndian(buf.AsSpan(off, 2))
+                                   : BinaryPrimitives.ReadUInt16BigEndian(buf.AsSpan(off, 2))));
+                    break;
+                }
 
             // ── 4-byte ───────────────────────────────────────────────────────
             case S7DataType.DWord:
             case S7DataType.UDInt:
             case S7DataType.TimeOfDay:
-            {
-                var get = CompileGetter<uint>(prop);
-                var set = CompileSetter<uint>(prop);
-                ser = (inst, buf, off, le) =>
                 {
-                    if (le) BinaryPrimitives.WriteUInt32LittleEndian(buf.AsSpan(off, 4), get(inst));
-                    else    BinaryPrimitives.WriteUInt32BigEndian   (buf.AsSpan(off, 4), get(inst));
-                };
-                deser = (inst, buf, off, le) => set(inst,
-                    le ? BinaryPrimitives.ReadUInt32LittleEndian(buf.AsSpan(off, 4))
-                       : BinaryPrimitives.ReadUInt32BigEndian   (buf.AsSpan(off, 4)));
-                break;
-            }
+                    var get = CompileGetter<uint>(prop);
+                    var set = CompileSetter<uint>(prop);
+                    ser = (inst, buf, off, le) =>
+                    {
+                        if (le) BinaryPrimitives.WriteUInt32LittleEndian(buf.AsSpan(off, 4), get(inst));
+                        else BinaryPrimitives.WriteUInt32BigEndian(buf.AsSpan(off, 4), get(inst));
+                    };
+                    deser = (inst, buf, off, le) => set(inst,
+                        le ? BinaryPrimitives.ReadUInt32LittleEndian(buf.AsSpan(off, 4))
+                           : BinaryPrimitives.ReadUInt32BigEndian(buf.AsSpan(off, 4)));
+                    break;
+                }
             case S7DataType.DInt:
             case S7DataType.Time:
-            {
-                var get = CompileGetter<int>(prop);
-                var set = CompileSetter<int>(prop);
-                ser = (inst, buf, off, le) =>
                 {
-                    if (le) BinaryPrimitives.WriteInt32LittleEndian(buf.AsSpan(off, 4), get(inst));
-                    else    BinaryPrimitives.WriteInt32BigEndian   (buf.AsSpan(off, 4), get(inst));
-                };
-                deser = (inst, buf, off, le) => set(inst,
-                    le ? BinaryPrimitives.ReadInt32LittleEndian(buf.AsSpan(off, 4))
-                       : BinaryPrimitives.ReadInt32BigEndian   (buf.AsSpan(off, 4)));
-                break;
-            }
+                    var get = CompileGetter<int>(prop);
+                    var set = CompileSetter<int>(prop);
+                    ser = (inst, buf, off, le) =>
+                    {
+                        if (le) BinaryPrimitives.WriteInt32LittleEndian(buf.AsSpan(off, 4), get(inst));
+                        else BinaryPrimitives.WriteInt32BigEndian(buf.AsSpan(off, 4), get(inst));
+                    };
+                    deser = (inst, buf, off, le) => set(inst,
+                        le ? BinaryPrimitives.ReadInt32LittleEndian(buf.AsSpan(off, 4))
+                           : BinaryPrimitives.ReadInt32BigEndian(buf.AsSpan(off, 4)));
+                    break;
+                }
             case S7DataType.Real:
-            {
-                var get = CompileGetter<float>(prop);
-                var set = CompileSetter<float>(prop);
-                ser = (inst, buf, off, le) =>
                 {
-                    float v = get(inst);
-                    if (le) BinaryPrimitives.WriteUInt32LittleEndian(buf.AsSpan(off, 4), BitConverter.SingleToUInt32Bits(v));
-                    else    ByteSwapper.WriteReal(buf.AsSpan(off), v);
-                };
-                deser = (inst, buf, off, le) => set(inst,
-                    le ? BitConverter.UInt32BitsToSingle(BinaryPrimitives.ReadUInt32LittleEndian(buf.AsSpan(off, 4)))
-                       : ByteSwapper.ReadReal(buf.AsSpan(off, 4)));
-                break;
-            }
+                    var get = CompileGetter<float>(prop);
+                    var set = CompileSetter<float>(prop);
+                    ser = (inst, buf, off, le) =>
+                    {
+                        float v = get(inst);
+                        if (le) BinaryPrimitives.WriteUInt32LittleEndian(buf.AsSpan(off, 4), BitConverter.SingleToUInt32Bits(v));
+                        else ByteSwapper.WriteReal(buf.AsSpan(off), v);
+                    };
+                    deser = (inst, buf, off, le) => set(inst,
+                        le ? BitConverter.UInt32BitsToSingle(BinaryPrimitives.ReadUInt32LittleEndian(buf.AsSpan(off, 4)))
+                           : ByteSwapper.ReadReal(buf.AsSpan(off, 4)));
+                    break;
+                }
 
             // ── 8-byte ───────────────────────────────────────────────────────
             case S7DataType.LWord:
             case S7DataType.ULInt:
-            {
-                var get = CompileGetter<ulong>(prop);
-                var set = CompileSetter<ulong>(prop);
-                ser = (inst, buf, off, le) =>
                 {
-                    if (le) BinaryPrimitives.WriteUInt64LittleEndian(buf.AsSpan(off, 8), get(inst));
-                    else    BinaryPrimitives.WriteUInt64BigEndian   (buf.AsSpan(off, 8), get(inst));
-                };
-                deser = (inst, buf, off, le) => set(inst,
-                    le ? BinaryPrimitives.ReadUInt64LittleEndian(buf.AsSpan(off, 8))
-                       : BinaryPrimitives.ReadUInt64BigEndian   (buf.AsSpan(off, 8)));
-                break;
-            }
+                    var get = CompileGetter<ulong>(prop);
+                    var set = CompileSetter<ulong>(prop);
+                    ser = (inst, buf, off, le) =>
+                    {
+                        if (le) BinaryPrimitives.WriteUInt64LittleEndian(buf.AsSpan(off, 8), get(inst));
+                        else BinaryPrimitives.WriteUInt64BigEndian(buf.AsSpan(off, 8), get(inst));
+                    };
+                    deser = (inst, buf, off, le) => set(inst,
+                        le ? BinaryPrimitives.ReadUInt64LittleEndian(buf.AsSpan(off, 8))
+                           : BinaryPrimitives.ReadUInt64BigEndian(buf.AsSpan(off, 8)));
+                    break;
+                }
             case S7DataType.LInt:
-            {
-                var get = CompileGetter<long>(prop);
-                var set = CompileSetter<long>(prop);
-                ser = (inst, buf, off, le) =>
                 {
-                    if (le) BinaryPrimitives.WriteInt64LittleEndian(buf.AsSpan(off, 8), get(inst));
-                    else    BinaryPrimitives.WriteInt64BigEndian   (buf.AsSpan(off, 8), get(inst));
-                };
-                deser = (inst, buf, off, le) => set(inst,
-                    le ? BinaryPrimitives.ReadInt64LittleEndian(buf.AsSpan(off, 8))
-                       : BinaryPrimitives.ReadInt64BigEndian   (buf.AsSpan(off, 8)));
-                break;
-            }
+                    var get = CompileGetter<long>(prop);
+                    var set = CompileSetter<long>(prop);
+                    ser = (inst, buf, off, le) =>
+                    {
+                        if (le) BinaryPrimitives.WriteInt64LittleEndian(buf.AsSpan(off, 8), get(inst));
+                        else BinaryPrimitives.WriteInt64BigEndian(buf.AsSpan(off, 8), get(inst));
+                    };
+                    deser = (inst, buf, off, le) => set(inst,
+                        le ? BinaryPrimitives.ReadInt64LittleEndian(buf.AsSpan(off, 8))
+                           : BinaryPrimitives.ReadInt64BigEndian(buf.AsSpan(off, 8)));
+                    break;
+                }
             case S7DataType.LReal:
-            {
-                var get = CompileGetter<double>(prop);
-                var set = CompileSetter<double>(prop);
-                ser = (inst, buf, off, le) =>
                 {
-                    double v = get(inst);
-                    if (le) BinaryPrimitives.WriteUInt64LittleEndian(buf.AsSpan(off, 8), BitConverter.DoubleToUInt64Bits(v));
-                    else    ByteSwapper.WriteLReal(buf.AsSpan(off), v);
-                };
-                deser = (inst, buf, off, le) => set(inst,
-                    le ? BitConverter.UInt64BitsToDouble(BinaryPrimitives.ReadUInt64LittleEndian(buf.AsSpan(off, 8)))
-                       : ByteSwapper.ReadLReal(buf.AsSpan(off, 8)));
-                break;
-            }
+                    var get = CompileGetter<double>(prop);
+                    var set = CompileSetter<double>(prop);
+                    ser = (inst, buf, off, le) =>
+                    {
+                        double v = get(inst);
+                        if (le) BinaryPrimitives.WriteUInt64LittleEndian(buf.AsSpan(off, 8), BitConverter.DoubleToUInt64Bits(v));
+                        else ByteSwapper.WriteLReal(buf.AsSpan(off), v);
+                    };
+                    deser = (inst, buf, off, le) => set(inst,
+                        le ? BitConverter.UInt64BitsToDouble(BinaryPrimitives.ReadUInt64LittleEndian(buf.AsSpan(off, 8)))
+                           : ByteSwapper.ReadLReal(buf.AsSpan(off, 8)));
+                    break;
+                }
             case S7DataType.DateAndTime:
-            {
-                int ws = wireSize;
-                var get = CompileGetter<DateTime>(prop);
-                var set = CompileSetter<DateTime>(prop);
-                ser = (inst, buf, off, _) =>
                 {
-                    var bytes = S7TypeConverter.Serialize(S7DataType.DateAndTime, get(inst));
-                    bytes.CopyTo(buf, off);
-                };
-                deser = (inst, buf, off, _) => set(inst,
-                    (DateTime)S7TypeConverter.Deserialize(S7DataType.DateAndTime, buf.AsSpan(off, ws)));
-                break;
-            }
+                    int ws = wireSize;
+                    var get = CompileGetter<DateTime>(prop);
+                    var set = CompileSetter<DateTime>(prop);
+                    ser = (inst, buf, off, _) =>
+                    {
+                        var bytes = S7TypeConverter.Serialize(S7DataType.DateAndTime, get(inst));
+                        bytes.CopyTo(buf, off);
+                    };
+                    deser = (inst, buf, off, _) => set(inst,
+                        (DateTime)S7TypeConverter.Deserialize(S7DataType.DateAndTime, buf.AsSpan(off, ws)));
+                    break;
+                }
 
             // ── Variable-length ───────────────────────────────────────────────
             case S7DataType.S7String:
-            {
-                int ml = maxLength;
-                int ws = wireSize;
-                var get = CompileGetter<string>(prop);
-                var set = CompileSetter<string>(prop);
-                ser   = (inst, buf, off, _) =>
-                    new S7String(get(inst) ?? string.Empty, (byte)ml).WriteTo(buf.AsSpan(off, ws));
-                deser = (inst, buf, off, _) =>
-                    set(inst, S7String.ReadFrom(buf.AsSpan(off, ws)).Value);
-                break;
-            }
+                {
+                    int ml = maxLength;
+                    int ws = wireSize;
+                    var get = CompileGetter<string>(prop);
+                    var set = CompileSetter<string>(prop);
+                    ser = (inst, buf, off, _) =>
+                        new S7String(get(inst) ?? string.Empty, (byte)ml).WriteTo(buf.AsSpan(off, ws));
+                    deser = (inst, buf, off, _) =>
+                        set(inst, S7String.ReadFrom(buf.AsSpan(off, ws)).Value);
+                    break;
+                }
             case S7DataType.S7WString:
-            {
-                int ml = maxLength;
-                int ws = wireSize;
-                var get = CompileGetter<string>(prop);
-                var set = CompileSetter<string>(prop);
-                ser   = (inst, buf, off, _) =>
-                    new S7WString(get(inst) ?? string.Empty, (ushort)ml).WriteTo(buf.AsSpan(off, ws));
-                deser = (inst, buf, off, _) =>
-                    set(inst, S7WString.ReadFrom(buf.AsSpan(off, ws)).Value);
-                break;
-            }
+                {
+                    int ml = maxLength;
+                    int ws = wireSize;
+                    var get = CompileGetter<string>(prop);
+                    var set = CompileSetter<string>(prop);
+                    ser = (inst, buf, off, _) =>
+                        new S7WString(get(inst) ?? string.Empty, (ushort)ml).WriteTo(buf.AsSpan(off, ws));
+                    deser = (inst, buf, off, _) =>
+                        set(inst, S7WString.ReadFrom(buf.AsSpan(off, ws)).Value);
+                    break;
+                }
             case S7DataType.Raw:
-            {
-                int ws = wireSize;
-                var get = CompileGetter<byte[]>(prop);
-                var set = CompileSetter<byte[]>(prop);
-                ser = (inst, buf, off, _) =>
                 {
-                    var v = get(inst);
-                    if (v is { Length: > 0 })
-                        v.AsSpan(0, Math.Min(v.Length, ws)).CopyTo(buf.AsSpan(off, ws));
-                };
-                deser = (inst, buf, off, _) => set(inst, buf.AsSpan(off, ws).ToArray());
-                break;
-            }
+                    int ws = wireSize;
+                    var get = CompileGetter<byte[]>(prop);
+                    var set = CompileSetter<byte[]>(prop);
+                    ser = (inst, buf, off, _) =>
+                    {
+                        var v = get(inst);
+                        if (v is { Length: > 0 })
+                            v.AsSpan(0, Math.Min(v.Length, ws)).CopyTo(buf.AsSpan(off, ws));
+                    };
+                    deser = (inst, buf, off, _) => set(inst, buf.AsSpan(off, ws).ToArray());
+                    break;
+                }
             case S7DataType.CharArray:
-            {
-                int ws = wireSize;
-                var get = CompileGetter<char[]>(prop);
-                var set = CompileSetter<char[]>(prop);
-                ser = (inst, buf, off, _) =>
                 {
-                    var ca  = get(inst);
-                    int len = ca?.Length ?? 0;
-                    for (int i = 0; i < ws; i++)
-                        buf[off + i] = i < len ? (byte)ca![i] : (byte)0;
-                };
-                deser = (inst, buf, off, _) =>
-                {
-                    var ca = new char[ws];
-                    for (int i = 0; i < ws; i++) ca[i] = (char)buf[off + i];
-                    set(inst, ca);
-                };
-                break;
-            }
+                    int ws = wireSize;
+                    var get = CompileGetter<char[]>(prop);
+                    var set = CompileSetter<char[]>(prop);
+                    ser = (inst, buf, off, _) =>
+                    {
+                        var ca = get(inst);
+                        int len = ca?.Length ?? 0;
+                        for (int i = 0; i < ws; i++)
+                            buf[off + i] = i < len ? (byte)ca![i] : (byte)0;
+                    };
+                    deser = (inst, buf, off, _) =>
+                    {
+                        var ca = new char[ws];
+                        for (int i = 0; i < ws; i++) ca[i] = (char)buf[off + i];
+                        set(inst, ca);
+                    };
+                    break;
+                }
 
             default:
                 throw new NotSupportedException(
@@ -415,9 +415,9 @@ internal static class S7TelegramReflector<T> where T : class, new()
     /// </summary>
     private static Func<T, TPrimitive> CompileGetter<TPrimitive>(PropertyInfo prop)
     {
-        var inst    = Expression.Parameter(typeof(T), "inst");
+        var inst = Expression.Parameter(typeof(T), "inst");
         var propExp = Expression.Property(inst, prop);
-        var body    = propExp.Type == typeof(TPrimitive)
+        var body = propExp.Type == typeof(TPrimitive)
             ? (Expression)propExp
             : Expression.Convert(propExp, typeof(TPrimitive));   // calls op_Implicit
         return Expression.Lambda<Func<T, TPrimitive>>(body, inst).Compile();
@@ -429,12 +429,12 @@ internal static class S7TelegramReflector<T> where T : class, new()
     /// </summary>
     private static Action<T, TPrimitive> CompileSetter<TPrimitive>(PropertyInfo prop)
     {
-        var inst    = Expression.Parameter(typeof(T), "inst");
-        var val     = Expression.Parameter(typeof(TPrimitive), "val");
+        var inst = Expression.Parameter(typeof(T), "inst");
+        var val = Expression.Parameter(typeof(TPrimitive), "val");
         var valConv = typeof(TPrimitive) == prop.PropertyType
             ? (Expression)val
             : Expression.Convert(val, prop.PropertyType);        // calls op_Implicit
-        var assign  = Expression.Assign(Expression.Property(inst, prop), valConv);
+        var assign = Expression.Assign(Expression.Property(inst, prop), valConv);
         return Expression.Lambda<Action<T, TPrimitive>>(assign, inst, val).Compile();
     }
 
@@ -450,13 +450,13 @@ internal static class S7TelegramReflector<T> where T : class, new()
         Action<T, byte[], int, bool> Serialize,
         Action<T, byte[], int, bool> Deserialize)
     {
-        public string     Name       { get; } = Name;
-        public S7DataType DataType   { get; } = DataType;
-        public int        WireSize   { get; } = WireSize;
-        public int        Offset     { get; } = Offset;
-        public int        BitIndex   { get; } = BitIndex;
-        public int        MaxLength  { get; } = MaxLength;
-        public Action<T, byte[], int, bool> Serialize   { get; } = Serialize;
+        public string Name { get; } = Name;
+        public S7DataType DataType { get; } = DataType;
+        public int WireSize { get; } = WireSize;
+        public int Offset { get; } = Offset;
+        public int BitIndex { get; } = BitIndex;
+        public int MaxLength { get; } = MaxLength;
+        public Action<T, byte[], int, bool> Serialize { get; } = Serialize;
         public Action<T, byte[], int, bool> Deserialize { get; } = Deserialize;
     }
 }
