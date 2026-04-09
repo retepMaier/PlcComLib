@@ -4,11 +4,11 @@ using PlcComLib.WpfTester.Models;
 
 namespace PlcComLib.WpfTester.ViewModels;
 
-public sealed partial class SelectableTelegramViewModel : ObservableObject
+public sealed partial class SelectableTelegramViewModel(TelegramDefinitionModel telegram) : ObservableObject
 {
     private const string NoFieldSelected = "(none)";
 
-    public TelegramDefinitionModel Telegram { get; }
+    public TelegramDefinitionModel Telegram { get; } = telegram;
 
     [ObservableProperty] public partial bool IsSelected { get; set; }
 
@@ -23,7 +23,6 @@ public sealed partial class SelectableTelegramViewModel : ObservableObject
     /// position and type.  Set to <c>"(none)"</c> to use the manual values instead.
     /// </summary>
     [ObservableProperty] public partial string MessageIdFieldName { get; set; } = NoFieldSelected;
-
     [ObservableProperty] public partial int MessageLength { get; set; }
     [ObservableProperty] public partial int LengthByteOffset { get; set; } = -1;
     [ObservableProperty] public partial S7DataType LengthDataType { get; set; } = S7DataType.Word;
@@ -42,11 +41,6 @@ public sealed partial class SelectableTelegramViewModel : ObservableObject
     /// </summary>
     public IReadOnlyList<string> AvailableFieldNames =>
         new[] { NoFieldSelected }.Concat(Telegram.Fields.Select(f => f.Name)).ToList();
-
-    public SelectableTelegramViewModel(TelegramDefinitionModel telegram)
-    {
-        Telegram = telegram;
-    }
 
     partial void OnMessageIdFieldNameChanged(string value)
     {

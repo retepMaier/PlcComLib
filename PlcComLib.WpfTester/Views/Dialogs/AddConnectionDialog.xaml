@@ -204,18 +204,24 @@ Foreground="{DynamicResource TextFillColorPrimaryBrush}">
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="8"/>
                                             <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="8"/>
+                                            <ColumnDefinition Width="*"/>
                                         </Grid.ColumnDefinitions>
                                         <StackPanel Grid.Column="0">
                                             <TextBlock Text="Message ID" FontSize="11" Opacity="0.7" Margin="0,0,0,2"/>
                                             <ui:NumberBox Minimum="0" Maximum="65535" Value="{Binding MessageId}" FontSize="12"/>
                                         </StackPanel>
                                         <StackPanel Grid.Column="2">
+                                            <TextBlock Text="ID Field" FontSize="11" Opacity="0.7" Margin="0,0,0,2"/>
+                                            <ComboBox ItemsSource="{Binding AvailableFieldNames}" SelectedItem="{Binding MessageIdFieldName}" FontSize="12" HorizontalAlignment="Stretch"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="4">
                                             <TextBlock Text="Wire Length (0=auto)" FontSize="11" Opacity="0.7" Margin="0,0,0,2"/>
                                             <ui:NumberBox Minimum="0" Maximum="65535" Value="{Binding MessageLength}" FontSize="12"/>
                                         </StackPanel>
-                                        <StackPanel Grid.Column="4">
-                                            <TextBlock Text="Length Field Offset (-1=off)" FontSize="11" Opacity="0.7" Margin="0,0,0,2"/>
-                                            <ui:NumberBox Minimum="-1" Maximum="255" Value="{Binding LengthByteOffset}" FontSize="12"/>
+                                        <StackPanel Grid.Column="6">
+                                            <TextBlock Text="Length Field" FontSize="11" Opacity="0.7" Margin="0,0,0,2"/>
+                                            <ComboBox ItemsSource="{Binding AvailableFieldNames}" SelectedItem="{Binding LengthFieldName}" FontSize="12" HorizontalAlignment="Stretch"/>
                                         </StackPanel>
                                     </Grid>
                                 </StackPanel>
