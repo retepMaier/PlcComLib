@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using FluentAssertions;
+using PlcComLib.Core.PlcTypes;
 using PlcComLib.DataTypes;
 using PlcComLib.Telegrams;
 

@@ -110,8 +110,8 @@ public sealed class UdpPlcClientBuilder
     /// byte offset and S7 data type used to read that id from the received payload.
     /// </summary>
     /// <typeparam name="TType">
-    /// S7 data type marker (e.g. <see cref="PlcComLib.DataTypes.S7Word"/>,
-    /// <see cref="PlcComLib.DataTypes.S7Int"/>, <see cref="PlcComLib.DataTypes.S7DWord"/>)
+    /// S7 data type marker (e.g. <see cref="Core.PlcTypes.S7Word"/>,
+    /// <see cref="Core.PlcTypes.S7Int"/>, <see cref="Core.PlcTypes.S7DWord"/>)
     /// that determines the field width and interpretation at <paramref name="byteOffset"/>.
     /// </typeparam>
     /// <param name="id">Expected id value for this telegram type. Any numeric value is accepted.</param>
@@ -179,8 +179,8 @@ public sealed class UdpPlcClientBuilder
     /// triggers a log warning and raises <c>UnknownTelegramReceived</c>.
     /// </summary>
     /// <typeparam name="TType">
-    /// S7 data type marker (e.g. <see cref="PlcComLib.DataTypes.S7Word"/>,
-    /// <see cref="PlcComLib.DataTypes.S7Int"/>) that determines the field width and
+    /// S7 data type marker (e.g. <see cref="Core.PlcTypes.S7Word"/>,
+    /// <see cref="Core.PlcTypes.S7Int"/>) that determines the field width and
     /// interpretation at <paramref name="byteOffset"/>.
     /// </typeparam>
     /// <param name="length">Expected total length in bytes. Any numeric value is accepted.</param>

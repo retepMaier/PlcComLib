@@ -1,4 +1,4 @@
-using PlcComLib.DataTypes;
+using PlcComLib.Core.PlcTypes;
 using PlcComLib.Telegrams;
 
 namespace PlcComLib.Playground.Telg;

@@ -1,3 +1,5 @@
+using PlcComLib.Core.PlcTypes;
+
 namespace PlcComLib.DataTypes;
 
 /// <summary>

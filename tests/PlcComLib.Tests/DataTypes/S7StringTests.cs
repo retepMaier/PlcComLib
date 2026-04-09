@@ -1,5 +1,5 @@
 using FluentAssertions;
-using PlcComLib.DataTypes;
+using PlcComLib.Core.PlcTypes;
 using Xunit;
 
 namespace PlcComLib.Tests.DataTypes;

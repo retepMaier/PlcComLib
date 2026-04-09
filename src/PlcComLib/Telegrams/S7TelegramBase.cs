@@ -1,3 +1,4 @@
+using PlcComLib.Core.PlcTypes;
 using PlcComLib.DataTypes;
 
 namespace PlcComLib.Telegrams;

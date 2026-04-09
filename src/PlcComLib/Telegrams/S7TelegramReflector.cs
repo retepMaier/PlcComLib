@@ -2,6 +2,7 @@ using System.Buffers;
 using System.Buffers.Binary;
 using System.Linq.Expressions;
 using System.Reflection;
+using PlcComLib.Core.PlcTypes;
 using PlcComLib.DataTypes;
 
 namespace PlcComLib.Telegrams;

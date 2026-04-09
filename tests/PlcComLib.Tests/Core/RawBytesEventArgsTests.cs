@@ -1,9 +1,6 @@
 using FluentAssertions;
-using PlcComLib.Core;
 using PlcComLib.Core.Events;
-using PlcComLib.DataTypes;
 using PlcComLib.Telegrams;
-using Xunit;
 
 namespace PlcComLib.Tests.Core;
 

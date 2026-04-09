@@ -1,4 +1,5 @@
 using FluentAssertions;
+using PlcComLib.Core.PlcTypes;
 using PlcComLib.DataTypes;
 using Xunit;
 
