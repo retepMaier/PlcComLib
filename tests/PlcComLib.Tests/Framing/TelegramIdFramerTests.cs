@@ -160,7 +160,7 @@ public class TelegramIdFramerTests
     }
 
     [Fact]
-    public void ZeroMessageId_Definition_IsIgnored()
+    public void ZeroMessageId_Definitions_AreFramedByFixedSize()
     {
         var definitions = new[]
         {
@@ -173,9 +173,10 @@ public class TelegramIdFramerTests
         };
         var framer = new TelegramIdFramer(definitions);
         var buffer = new byte[] { 0x00, 0x00, 0xAA };
-        // MessageId=0 definitions are ignored; registry is empty → no IDs checked → consumed = 0
-        framer.TryExtract(buffer, out _, out int consumed).Should().BeFalse();
-        consumed.Should().Be(0);
+        // Without any MessageId the single registered wire size (2) is used as a fixed frame size.
+        framer.TryExtract(buffer, out var message, out int consumed).Should().BeTrue();
+        consumed.Should().Be(2);
+        message.ToArray().Should().Equal(0x00, 0x00);
     }
 }
 

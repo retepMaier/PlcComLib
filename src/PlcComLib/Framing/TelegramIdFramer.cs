@@ -27,31 +27,81 @@ public sealed class TelegramIdFramer : IMessageFramer
 {
     private readonly ByteOrder _byteOrder;
 
-    // MessageId → (EffectiveWireSize, MessageIdByteOffset, MessageIdDataType)
-    private readonly IReadOnlyDictionary<long, FrameEntry> _entryByMessageId;
+    // Id-based entries, in registration order.
+    private readonly FrameEntry[] _entries;
 
-    private readonly record struct FrameEntry(int WireSize, int IdByteOffset, S7DataType IdDataType);
+    // Frame size used when the registry holds only size-based definitions (no MessageId).
+    // 0 when id-based framing is used.
+    private readonly int _fixedSize;
+
+    private readonly record struct FrameEntry(long MessageId, int WireSize, int IdByteOffset, S7DataType IdDataType, int MinBytes);
+
+    /// <summary>Largest frame this framer can produce; the receive buffer never needs to hold more.</summary>
+    public int MaxFrameSize { get; }
 
     /// <param name="definitions">
-    /// The registered telegram definitions. Only definitions with a non-zero
-    /// <see cref="TelegramDefinition.MessageId"/> are used for frame-size lookup.
+    /// The registered telegram definitions. Definitions with a non-zero
+    /// <see cref="TelegramDefinition.MessageId"/> are framed by id. If no definition has a
+    /// MessageId, all definitions must share a single wire size, which is then used as a
+    /// fixed frame size. Mixing both kinds is rejected because a byte stream cannot be split
+    /// reliably without an id.
     /// </param>
     /// <param name="byteOrder">
     /// Byte order used to read the TelegramId from the stream. Must match the
     /// byte order configured on the connection.
     /// </param>
+    /// <exception cref="ArgumentException">The definitions cannot be framed unambiguously.</exception>
     public TelegramIdFramer(IEnumerable<TelegramDefinition> definitions, ByteOrder byteOrder = ByteOrder.BigEndian)
     {
         ArgumentNullException.ThrowIfNull(definitions);
         _byteOrder = byteOrder;
 
-        var dict = new Dictionary<long, FrameEntry>();
+        var entries   = new List<FrameEntry>();
+        var sizeBased = new List<TelegramDefinition>();
         foreach (var def in definitions)
         {
-            if (def.MessageId != 0)
-                dict[def.MessageId] = new FrameEntry(def.EffectiveWireSize, def.MessageIdByteOffset, def.MessageIdDataType);
+            if (def.MessageId == 0)
+            {
+                // Definitions with neither id nor size can never match anything — ignore them.
+                if (def.EffectiveWireSize > 0) sizeBased.Add(def);
+                continue;
+            }
+
+            if (def.MessageIdByteOffset < 0)
+                throw new ArgumentException(
+                    $"Telegram '{def.Id}': MessageId byte offset must not be negative (was {def.MessageIdByteOffset}).",
+                    nameof(definitions));
+
+            int minBytes = def.MessageIdByteOffset + S7TypeConverter.GetWireSize(def.MessageIdDataType);
+            if (def.EffectiveWireSize < minBytes)
+                throw new ArgumentException(
+                    $"Telegram '{def.Id}': wire size {def.EffectiveWireSize} is too small to contain its MessageId " +
+                    $"at offset {def.MessageIdByteOffset} ({minBytes} bytes needed). Declare fields or call WithLength.",
+                    nameof(definitions));
+
+            entries.Add(new FrameEntry(def.MessageId, def.EffectiveWireSize, def.MessageIdByteOffset, def.MessageIdDataType, minBytes));
         }
-        _entryByMessageId = dict;
+
+        if (entries.Count > 0 && sizeBased.Count > 0)
+            throw new ArgumentException(
+                "TCP framing cannot mix telegrams with and without a MessageId: " +
+                $"'{string.Join("', '", sizeBased.Select(d => d.Id))}' have no MessageId. " +
+                "Call WithMessageId for every registered telegram.",
+                nameof(definitions));
+
+        if (sizeBased.Count > 0)
+        {
+            var sizes = sizeBased.Select(d => d.EffectiveWireSize).Distinct().ToArray();
+            if (sizes.Length > 1)
+                throw new ArgumentException(
+                    "TCP framing without a MessageId requires all telegrams to have the same wire size, " +
+                    $"but found sizes {string.Join(", ", sizes)}. Call WithMessageId for every registered telegram.",
+                    nameof(definitions));
+            _fixedSize = sizes[0];
+        }
+
+        _entries     = [.. entries];
+        MaxFrameSize = _fixedSize > 0 ? _fixedSize : (entries.Count > 0 ? entries.Max(e => e.WireSize) : 0);
     }
 
     /// <summary>
@@ -67,41 +117,57 @@ public sealed class TelegramIdFramer : IMessageFramer
     /// expected total wire size, and waits until that many bytes are available.
     /// </summary>
     /// <remarks>
-    /// On a <c>false</c> return, <paramref name="consumed"/> is set to <c>1</c> when the buffer
-    /// contained enough bytes to check at least one registered ID but none matched — the caller
-    /// should discard those bytes and retry. <paramref name="consumed"/> remains <c>0</c> when
-    /// there were insufficient bytes to evaluate any registered ID (wait for more data), or when
-    /// an ID matched but the full frame has not yet arrived (wait for more data).
+    /// <para>
+    /// On a <c>false</c> return, <paramref name="consumed"/> is set to <c>1</c> only when the
+    /// buffer was long enough to check <em>every</em> registered ID and none matched — the caller
+    /// should discard that byte and retry. It remains <c>0</c> when some ID could not be checked
+    /// yet, or when an ID matched but the full frame has not arrived (wait for more data).
+    /// </para>
+    /// <para>
+    /// With no registered definitions at all, the whole buffer is returned as one message so
+    /// the caller can report it as unknown instead of buffering it forever.
+    /// </para>
     /// </remarks>
     public bool TryExtract(ReadOnlySpan<byte> buffer, out ReadOnlySpan<byte> message, out int consumed)
     {
         message  = default;
         consumed = 0;
+        if (buffer.IsEmpty) return false;
 
-        bool anyIdChecked = false;
-
-        // Try each registered definition: find the first whose ID matches at its configured offset.
-        foreach (var (msgId, entry) in _entryByMessageId)
+        if (_fixedSize > 0)
         {
-            int idSize = S7TypeConverter.GetWireSize(entry.IdDataType);
-            int minBytes = entry.IdByteOffset + idSize;
-            if (buffer.Length < minBytes) continue;
+            if (buffer.Length < _fixedSize) return false;
+            message  = buffer[.._fixedSize];
+            consumed = _fixedSize;
+            return true;
+        }
 
-            anyIdChecked = true;
-            long telegramId = ReadId(buffer, entry.IdByteOffset, entry.IdDataType);
-            if (telegramId != msgId) continue;
+        if (_entries.Length == 0)
+        {
+            message  = buffer;
+            consumed = buffer.Length;
+            return true;
+        }
+
+        bool allChecked = true;
+        foreach (var entry in _entries)
+        {
+            if (buffer.Length < entry.MinBytes) { allChecked = false; continue; }
+
+            long telegramId = ReadId(buffer, entry.IdByteOffset, entry.IdDataType, _byteOrder);
+            if (telegramId != entry.MessageId) continue;
 
             // ID matched — wait for the full frame.
             if (buffer.Length < entry.WireSize) return false;
 
-            message  = buffer.Slice(0, entry.WireSize);
+            message  = buffer[..entry.WireSize];
             consumed = entry.WireSize;
             return true;
         }
 
-        // If at least one ID was read but nothing matched, signal that 1 byte should be
-        // discarded so the caller can scan forward and avoid an unbounded buffer.
-        if (anyIdChecked) consumed = 1;
+        // Only give up on the first byte once every registered ID has been checked; otherwise a
+        // partially received frame whose ID sits at a larger offset would lose its first byte.
+        if (allChecked) consumed = 1;
         return false;
     }
 
@@ -117,7 +183,7 @@ public sealed class TelegramIdFramer : IMessageFramer
         bool le = byteOrder == ByteOrder.LittleEndian;
         return dataType switch
         {
-            S7DataType.Byte  => buffer[offset],
+            S7DataType.Byte or S7DataType.USInt => buffer[offset],
             S7DataType.SInt  => (sbyte)buffer[offset],
             S7DataType.Int   => le
                 ? BinaryPrimitives.ReadInt16LittleEndian(buffer.Slice(offset, 2))
@@ -141,10 +207,6 @@ public sealed class TelegramIdFramer : IMessageFramer
         };
     }
 
-    // Private instance wrapper forwarding to the static method for use by TryExtract.
-    private long ReadId(ReadOnlySpan<byte> buffer, int offset, S7DataType dataType)
-        => ReadId(buffer, offset, dataType, _byteOrder);
-
     /// <summary>
     /// Reads an integer length value from <paramref name="buffer"/> at the given
     /// <paramref name="offset"/> using the specified <paramref name="dataType"/> and byte order.
@@ -155,7 +217,7 @@ public sealed class TelegramIdFramer : IMessageFramer
         bool le = byteOrder == ByteOrder.LittleEndian;
         return dataType switch
         {
-            S7DataType.Byte  => buffer[offset],
+            S7DataType.Byte or S7DataType.USInt => buffer[offset],
             S7DataType.SInt  => (sbyte)buffer[offset],
             S7DataType.Int   => le
                 ? BinaryPrimitives.ReadInt16LittleEndian(buffer.Slice(offset, 2))
@@ -178,5 +240,42 @@ public sealed class TelegramIdFramer : IMessageFramer
                 : BinaryPrimitives.ReadUInt16BigEndian(buffer.Slice(offset, 2)),
         };
     }
-}
 
+    /// <summary>
+    /// Writes an integer header value (MessageId or length) into <paramref name="buffer"/> at
+    /// <paramref name="offset"/>, using the same encoding that <see cref="ReadId"/> reads.
+    /// Returns <c>false</c> (and writes nothing) when the field does not fit or the type is not an integer type.
+    /// </summary>
+    internal static bool TryWriteInteger(Span<byte> buffer, int offset, S7DataType dataType, long value, ByteOrder byteOrder)
+    {
+        int size = dataType switch
+        {
+            S7DataType.Byte or S7DataType.USInt or S7DataType.SInt => 1,
+            S7DataType.Word or S7DataType.UInt or S7DataType.Int   => 2,
+            S7DataType.DWord or S7DataType.DInt                    => 4,
+            S7DataType.LWord or S7DataType.LInt                    => 8,
+            _                                                      => 0,
+        };
+        if (size == 0 || offset < 0 || offset + size > buffer.Length) return false;
+
+        var dst = buffer.Slice(offset, size);
+        bool le = byteOrder == ByteOrder.LittleEndian;
+        switch (size)
+        {
+            case 1: dst[0] = unchecked((byte)value); break;
+            case 2:
+                if (le) BinaryPrimitives.WriteUInt16LittleEndian(dst, unchecked((ushort)value));
+                else    BinaryPrimitives.WriteUInt16BigEndian(dst, unchecked((ushort)value));
+                break;
+            case 4:
+                if (le) BinaryPrimitives.WriteUInt32LittleEndian(dst, unchecked((uint)value));
+                else    BinaryPrimitives.WriteUInt32BigEndian(dst, unchecked((uint)value));
+                break;
+            default:
+                if (le) BinaryPrimitives.WriteInt64LittleEndian(dst, value);
+                else    BinaryPrimitives.WriteInt64BigEndian(dst, value);
+                break;
+        }
+        return true;
+    }
+}
