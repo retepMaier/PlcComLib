@@ -22,7 +22,8 @@ public class BuilderGenericFramingTests
         var builder = new TcpPlcClientBuilder()
             .ConnectTo("127.0.0.1", 2000)
             .RegisterTelegram(new PlcComLib.Telegrams.TelegramDefinition { Id = "T1" })
-            .WithMessageId<S7Word>(id: 0x0001, byteOffset: 0);
+            .WithMessageId<S7Word>(id: 0x0001, byteOffset: 0)
+            .WithLength<S7Word>(length: 4, byteOffset: 2);
 
         // Verify by building — no exception means it compiled and ran correctly.
         // (We inspect the stored definition via the registry implicitly through Build().)
@@ -203,19 +204,20 @@ public class BuilderGenericFramingTests
     }
 
     // ── Property-selector overloads ──────────────────────────────────────────────
+    // The builders register a private copy of T.Definition; inspect that copy via Registry.
+
+    private static PlcComLib.Telegrams.TelegramDefinition Registered(PlcComLib.Telegrams.TelegramRegistry registry)
+        => registry.Get(nameof(SelectorTestTelegram));
 
     [Fact]
     public void TcpClient_WithMessageId_Selector_SetsOffsetFromPropertyPosition()
     {
-        var def = SelectorTestTelegram.Definition;
-        // Reset in case other tests modified it
-        def.MessageId = 0; def.MessageIdByteOffset = -1;
-
-        new TcpPlcClientBuilder()
+        var builder = new TcpPlcClientBuilder()
             .ConnectTo("127.0.0.1", 2000)
             .RegisterTelegram<SelectorTestTelegram>()
             .WithMessageId(id: 1, (SelectorTestTelegram t) => t.TlgId);
 
+        var def = Registered(builder.Registry);
         def.MessageId.Should().Be(1);
         def.MessageIdByteOffset.Should().Be(0);          // TlgId is first field → offset 0
         def.MessageIdDataType.Should().Be(S7DataType.Int);
@@ -224,16 +226,14 @@ public class BuilderGenericFramingTests
     [Fact]
     public void TcpClient_WithLength_Selector_SetsOffsetFromPropertyPosition()
     {
-        var def = SelectorTestTelegram.Definition;
-        def.LengthByteOffset = -1;
-
-        new TcpPlcClientBuilder()
+        var builder = new TcpPlcClientBuilder()
             .ConnectTo("127.0.0.1", 2000)
             .RegisterTelegram<SelectorTestTelegram>()
             .WithMessageId(id: 1, (SelectorTestTelegram t) => t.TlgId)
-            .WithLength(length: 12, (SelectorTestTelegram t) => t.TlgLength);
+            .WithLength(length: 6, (SelectorTestTelegram t) => t.TlgLength);
 
-        def.ConfiguredWireSize.Should().Be(12);
+        var def = Registered(builder.Registry);
+        def.ConfiguredWireSize.Should().Be(6);
         def.LengthByteOffset.Should().Be(2);             // TlgLength is second field → offset 2
         def.LengthDataType.Should().Be(S7DataType.Int);
     }
@@ -241,13 +241,12 @@ public class BuilderGenericFramingTests
     [Fact]
     public void TcpClient_WithMessageId_Selector_ThirdField_SetsCorrectOffset()
     {
-        var def = SelectorTestTelegram.Definition;
-
-        new TcpPlcClientBuilder()
+        var builder = new TcpPlcClientBuilder()
             .ConnectTo("127.0.0.1", 2000)
             .RegisterTelegram<SelectorTestTelegram>()
             .WithMessageId(id: 99, (SelectorTestTelegram t) => t.MachineId);
 
+        var def = Registered(builder.Registry);
         def.MessageIdByteOffset.Should().Be(4);          // MachineId is third field → offset 0+2+2=4
         def.MessageIdDataType.Should().Be(S7DataType.Word);
     }
@@ -255,14 +254,12 @@ public class BuilderGenericFramingTests
     [Fact]
     public void TcpServer_WithMessageId_Selector_SetsOffsetAndDataType()
     {
-        var def = SelectorTestTelegram.Definition;
-        def.MessageId = 0; def.MessageIdByteOffset = -1;
-
-        new TcpPlcServerBuilder()
+        var builder = new TcpPlcServerBuilder()
             .ListenOn("0.0.0.0", 2000)
             .RegisterTelegram<SelectorTestTelegram>()
             .WithMessageId(id: 5, (SelectorTestTelegram t) => t.TlgId);
 
+        var def = Registered(builder.Registry);
         def.MessageId.Should().Be(5);
         def.MessageIdByteOffset.Should().Be(0);
         def.MessageIdDataType.Should().Be(S7DataType.Int);
@@ -271,14 +268,13 @@ public class BuilderGenericFramingTests
     [Fact]
     public void TcpServer_WithLength_Selector_SetsOffsetAndDataType()
     {
-        var def = SelectorTestTelegram.Definition;
-
-        new TcpPlcServerBuilder()
+        var builder = new TcpPlcServerBuilder()
             .ListenOn("0.0.0.0", 2000)
             .RegisterTelegram<SelectorTestTelegram>()
             .WithMessageId(id: 5, (SelectorTestTelegram t) => t.TlgId)
             .WithLength(length: 6, (SelectorTestTelegram t) => t.TlgLength);
 
+        var def = Registered(builder.Registry);
         def.ConfiguredWireSize.Should().Be(6);
         def.LengthByteOffset.Should().Be(2);
         def.LengthDataType.Should().Be(S7DataType.Int);
@@ -287,14 +283,12 @@ public class BuilderGenericFramingTests
     [Fact]
     public void UdpClient_WithMessageId_Selector_SetsOffsetAndDataType()
     {
-        var def = SelectorTestTelegram.Definition;
-        def.MessageId = 0; def.MessageIdByteOffset = -1;
-
-        new UdpPlcClientBuilder()
+        var builder = new UdpPlcClientBuilder()
             .SendTo("127.0.0.1", 5000)
             .RegisterTelegram<SelectorTestTelegram>()
             .WithMessageId(id: 7, (SelectorTestTelegram t) => t.TlgId);
 
+        var def = Registered(builder.Registry);
         def.MessageId.Should().Be(7);
         def.MessageIdByteOffset.Should().Be(0);
         def.MessageIdDataType.Should().Be(S7DataType.Int);
@@ -303,14 +297,13 @@ public class BuilderGenericFramingTests
     [Fact]
     public void UdpServer_WithLength_Selector_SetsOffsetAndDataType()
     {
-        var def = SelectorTestTelegram.Definition;
-
-        new UdpPlcServerBuilder()
+        var builder = new UdpPlcServerBuilder()
             .ListenOn("0.0.0.0", 5000)
             .RegisterTelegram<SelectorTestTelegram>()
             .WithMessageId(id: 7, (SelectorTestTelegram t) => t.TlgId)
             .WithLength(length: 6, (SelectorTestTelegram t) => t.TlgLength);
 
+        var def = Registered(builder.Registry);
         def.LengthByteOffset.Should().Be(2);
         def.LengthDataType.Should().Be(S7DataType.Int);
     }

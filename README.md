@@ -52,7 +52,7 @@ Values are read and written via implicit operators — no casts required:
 var status = new MachineStatus
 {
     TlgId        = 1,
-    TlgLength    = 12,
+    TlgLength    = 14,   // MachineStatus.WireSize — see the layout note below
     MachineId    = 42,
     CurrentSpeed = 1500,
     IsRunning    = true,
@@ -69,12 +69,16 @@ float  temp  = status.Temperature;   // S7Real  → float
 
 | Member | Description |
 |---|---|
-| `MachineStatus.WireSize` | Total wire size — sum of all declared S7 field widths |
+| `MachineStatus.WireSize` | Total wire size in the PLC layout, including even-byte padding and bool packing (14 for `MachineStatus`) |
 | `MachineStatus.Definition` | `TelegramDefinition` with field list; `MessageId` set at registration time |
 | `MachineStatus.Deserialize(span, byteOrder)` | Creates and populates a new instance from raw bytes |
 | `instance.Serialize(byteOrder)` | Serialises the instance to `byte[]` |
 | `instance.TelegramId` | Returns `(ushort)Definition.MessageId` |
 | `instance.ToDataBlock(byteOrder)` | Serialises to an `S7DataBlock` with named, PLC-offset-indexed field access |
+
+> **Layout note:** fields are laid out like a standard (non-optimised) S7 data block. `MachineStatus` is
+> 14 bytes, not 13: `IsRunning` occupies bit 0 of byte 8, byte 9 is padding, and `Temperature` starts at
+> the even offset 10. Always pass `MachineStatus.WireSize` to `WithLength` — the builder rejects any other value.
 
 ---
 
@@ -89,7 +93,7 @@ var client = new TcpPlcClientBuilder()
     .WithNoDelay()                        // avoids Nagle coalescing delays
     .RegisterTelegram<MachineStatus>()
         .WithMessageId(id: 1,      (MachineStatus t) => t.TlgId)      // offset inferred from property
-        .WithLength   (length: 12, (MachineStatus t) => t.TlgLength)  // offset inferred from property
+        .WithLength   (MachineStatus.WireSize, (MachineStatus t) => t.TlgLength)  // offset inferred from property
     .Build();
 
 client.Subscribe<MachineStatus>(msg =>
@@ -107,6 +111,9 @@ var status = new MachineStatus { MachineId = 42, CurrentSpeed = 1500, IsRunning 
 await client.SendAsync(status);
 ```
 
+`SendAsync` writes the MessageId and length configured on the builder into `TlgId` and `TlgLength`,
+so you don't have to set them yourself.
+
 ---
 
 ### 4 · TCP server
@@ -117,7 +124,7 @@ var server = new TcpPlcServerBuilder()
     .WithMaxConnections(20)
     .RegisterTelegram<MachineStatus>()
         .WithMessageId(id: 1,      (MachineStatus t) => t.TlgId)
-        .WithLength   (length: 12, (MachineStatus t) => t.TlgLength)
+        .WithLength   (MachineStatus.WireSize, (MachineStatus t) => t.TlgLength)
     .Build();
 
 server.Subscribe<MachineStatus>((msg, address, port) =>
@@ -140,14 +147,16 @@ var udpClient = new UdpPlcClientBuilder()
     .WithByteOrder(ByteOrder.BigEndian)
     .RegisterTelegram<MachineStatus>()
         .WithMessageId(id: 1,      (MachineStatus t) => t.TlgId)
-        .WithLength   (length: 12, (MachineStatus t) => t.TlgLength)
+        .WithLength   (MachineStatus.WireSize, (MachineStatus t) => t.TlgLength)
     .Build();
+// The UDP client binds a local port when it starts (OS-assigned, or .WithLocalPort(port)),
+// so it receives replies even before it has sent anything.
 
 var udpServer = new UdpPlcServerBuilder()
     .ListenOn("0.0.0.0", 5000)
     .RegisterTelegram<MachineStatus>()
         .WithMessageId(id: 1,      (MachineStatus t) => t.TlgId)
-        .WithLength   (length: 12, (MachineStatus t) => t.TlgLength)
+        .WithLength   (MachineStatus.WireSize, (MachineStatus t) => t.TlgLength)
     .Build();
 ```
 
@@ -329,7 +338,8 @@ public class ProductTelegram : S7TelegramBase<ProductTelegram>
 
 | Method | Default | Description |
 |---|---|---|
-| `.SendTo(host, port)` | `"127.0.0.1"`, `2000` | Remote host and UDP port to send datagrams to |
+| `.SendTo(host, port)` | `"127.0.0.1"`, `2000` | Remote host (IP or host name) and UDP port to send datagrams to |
+| `.WithLocalPort(port)` | `0` (OS picks) | Local port to bind for receiving replies — set it when the PLC replies to a fixed port |
 | `.WithTimeout(timeout)` | `5 s` | Socket-level send/receive timeout |
 | `.WithReceiveBufferSize(size)` | `0` (OS default) | Sets SO_RCVBUF. Increase to reduce datagram loss under burst load |
 | `.WithSendBufferSize(size)` | `0` (OS default) | Sets SO_SNDBUF |
@@ -401,12 +411,12 @@ When using source-generated typed telegrams, you can reference the field propert
 ```csharp
 .RegisterTelegram<MachineStatus>()
     .WithMessageId(id: 1,      (MachineStatus t) => t.TlgId)      // S7Int at offset 0
-    .WithLength   (length: 12, (MachineStatus t) => t.TlgLength)  // S7Int at offset 2
+    .WithLength   (MachineStatus.WireSize, (MachineStatus t) => t.TlgLength)  // S7Int at offset 2
 
 // Equivalent explicit form:
 .RegisterTelegram<MachineStatus>()
     .WithMessageId<S7Int>(id: 1,      byteOffset: 0)
-    .WithLength<S7Int>   (length: 12, byteOffset: 2)
+    .WithLength<S7Int>   (length: 14, byteOffset: 2)
 ```
 
 Both type arguments (`TTelegram` and `TField`) are inferred from the lambda. The explicit `(MachineStatus t)` parameter type annotation is required because the builder itself is not generic.
@@ -429,6 +439,16 @@ IDisposable sub2 = client.Subscribe<MachineStatus>((msg, address, port) =>
 });
 
 sub.Dispose(); // unsubscribe
+```
+
+`Subscribe<T>` requires `T` to be registered on the same builder (it throws otherwise) and matches the
+MessageId configured *for that connection* — two connections can use the same telegram type with different
+ids. Typed subscribers are decoded with `T.Deserialize` and are independent of `TelegramReceived`.
+
+An exception thrown by any event handler or subscriber is logged and swallowed: it never stops a receive,
+accept or reconnect loop, and never prevents other handlers from running.
+
+```csharp
 
 // ── Raw / diagnostic events ───────────────────────────────────────────────────
 
@@ -466,13 +486,16 @@ When a frame arrives, the connection dispatches it in this order:
 
 1. **TelegramId match** — the value at `Definition.MessageIdByteOffset` (read as `Definition.MessageIdDataType`) equals `Definition.MessageId` → deserialised and fired via `TelegramReceived`.
 2. **Size-based fallback** — `MessageId == 0` and payload length matches `Definition.EffectiveWireSize` → deserialised and fired.
+   Over TCP a byte stream can only be split without an id when *every* registered telegram has no MessageId
+   and all share the same wire size; `Build()` rejects other combinations.
 3. **Unknown** — no match; fires `UnknownTelegramReceived`.
 
 ---
 
 ## 🖼️ Wire Format
 
-Fields are serialised exactly as declared, in declaration order, with no implicit header:
+Fields are serialised in declaration order, with no implicit header, at their S7 data-block offsets
+(multi-byte fields start at even offsets, consecutive `S7Bool` fields share a byte):
 
 ```
 ┌──────────┬──────────┬──────────┬──────────┬─────┐
@@ -512,15 +535,14 @@ var def = new TelegramDefinition
     Id   = "LegacyStatus",
     Fields =
     [
-        new TelegramField { Name = "MachineId", DataType = S7DataType.Word },
-        new TelegramField { Name = "Speed",     DataType = S7DataType.Real },
+        new TelegramField { Name = "TlgId", DataType = S7DataType.Word },
+        new TelegramField { Name = "Speed", DataType = S7DataType.Real },
     ],
 };
 
 new TcpPlcClientBuilder()
     .RegisterTelegram(def)
-        .WithMessageId(0x0099)
-        .WithLength(2 + 4)
+        .WithMessageId<S7Word>(id: 0x0099, byteOffset: 0)   // wire size = 2 + 4 from the fields
     .Build();
 ```
 

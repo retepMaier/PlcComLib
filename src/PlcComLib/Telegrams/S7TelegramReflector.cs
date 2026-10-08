@@ -123,6 +123,7 @@ internal static class S7TelegramReflector<T> where T : class, new()
     {
         Id = typeof(T).Name,
         ConfiguredWireSize = WireSize,
+        LayoutWireSize = WireSize,
         Fields = _plan.Select(static p => new TelegramField
         {
             Name = p.Name,

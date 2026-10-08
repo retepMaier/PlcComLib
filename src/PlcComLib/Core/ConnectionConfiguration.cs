@@ -11,6 +11,12 @@ public sealed class ConnectionConfiguration
     /// <summary>Port number.</summary>
     public int Port { get; init; } = 2000;
 
+    /// <summary>
+    /// Local port the UDP client binds to for receiving replies. <c>0</c> (default) lets the OS
+    /// pick a free port. Set it when the PLC sends its replies to a fixed port.
+    /// </summary>
+    public int LocalPort { get; init; } = 0;
+
     /// <summary>Client or Server.</summary>
     public ConnectionMode Mode { get; init; } = ConnectionMode.Client;
 

@@ -2,8 +2,10 @@ using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using PlcComLib.Core;
 using PlcComLib.Core.Events;
+using PlcComLib.Core.Internal;
 using PlcComLib.DataTypes;
 using PlcComLib.Framing;
 using PlcComLib.Telegrams;
@@ -20,22 +22,10 @@ public sealed partial class TcpPlcServer(
     ILogger<TcpPlcServer>? logger = null,
     ByteOrder byteOrder = ByteOrder.BigEndian) : IPlcConnection
 {
+    private readonly ILogger _logger = (ILogger?)logger ?? NullLogger.Instance;
     private readonly ConnectionConfiguration _config = config ?? throw new ArgumentNullException(nameof(config));
-    private readonly TelegramIdFramer _framer =  new(registry.Definitions, byteOrder);
-
-    // Pre-built dispatch lookup tables — see TcpPlcClient for rationale.
-    private readonly (int Offset, S7DataType Type, Dictionary<long, TelegramDefinition> Lookup)[] _idGroups =
-        registry!.Definitions
-            .Where(d => d.MessageId != 0)
-            .GroupBy(d => (d.MessageIdByteOffset, d.MessageIdDataType))
-            .Select(g => (g.Key.MessageIdByteOffset, g.Key.MessageIdDataType, g.ToDictionary(d => d.MessageId)))
-            .ToArray();
-
-    private readonly Dictionary<int, TelegramDefinition> _sizeIndex =
-        registry!.Definitions
-            .Where(d => d.MessageId == 0 && d.EffectiveWireSize > 0)
-            .GroupBy(d => d.EffectiveWireSize)
-            .ToDictionary(g => g.Key, g => g.First());
+    private readonly TelegramIdFramer _framer = new(registry.Definitions, byteOrder);
+    private readonly TelegramDispatcher _dispatcher = new(registry, byteOrder, logger);
 
     private TcpListener? _listener;
     private CancellationTokenSource? _cts;
@@ -71,8 +61,8 @@ public sealed partial class TcpPlcServer(
         _listener.Start(_config.MaxConnections);
         _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _isConnected = true;
-        ConnectionStateChanged?.Invoke(this, new ConnectionStateChangedEventArgs(true, "Server started"));
-        LogServerListening(logger, _config.Host, _config.Port);
+        EventRaiser.Raise(ConnectionStateChanged, this, new ConnectionStateChangedEventArgs(true, "Server started"), _logger);
+        LogServerListening(_logger, _config.Host, _config.Port);
         _acceptTask = AcceptLoopAsync(_cts.Token);
         return Task.CompletedTask;
     }
@@ -86,7 +76,7 @@ public sealed partial class TcpPlcServer(
         foreach (var ctx in _clients.Values) ctx.Dispose();
         _clients.Clear();
         _isConnected = false;
-        ConnectionStateChanged?.Invoke(this, new ConnectionStateChangedEventArgs(false, "Server stopped"));
+        EventRaiser.Raise(ConnectionStateChanged, this, new ConnectionStateChangedEventArgs(false, "Server stopped"), _logger);
     }
 
     // ── Send (broadcast) ──────────────────────────────────────────────────────
@@ -99,7 +89,7 @@ public sealed partial class TcpPlcServer(
         await Task.WhenAll(_clients.Values.Select(async c =>
         {
             await c.SendAsync(framed, cancellationToken);
-            RawBytesSent?.Invoke(this, new RawBytesEventArgs(framed, c.RemoteAddress, c.Port));
+            EventRaiser.Raise(RawBytesSent, this, new RawBytesEventArgs(framed, c.RemoteAddress, c.Port), _logger);
         }));
     }
 
@@ -107,11 +97,11 @@ public sealed partial class TcpPlcServer(
     public async Task SendAsync<T>(T telegram, CancellationToken cancellationToken = default)where T : ITypedS7Telegram<T>
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        var framed = _framer.Frame(telegram.Serialize(byteOrder));
+        var framed = _framer.Frame(_dispatcher.Serialize(telegram));
         await Task.WhenAll(_clients.Values.Select(async c =>
         {
             await c.SendAsync(framed, cancellationToken);
-            RawBytesSent?.Invoke(this, new RawBytesEventArgs(framed, c.RemoteAddress, c.Port));
+            EventRaiser.Raise(RawBytesSent, this, new RawBytesEventArgs(framed, c.RemoteAddress, c.Port), _logger);
         }));
     }
 
@@ -124,7 +114,7 @@ public sealed partial class TcpPlcServer(
             throw new KeyNotFoundException($"Client {clientId} not found.");
         var framed = _framer.Frame(TelegramSerializer.Serialize(telegram, byteOrder));
         await ctx.SendAsync(framed, cancellationToken);
-        RawBytesSent?.Invoke(this, new RawBytesEventArgs(framed, ctx.RemoteAddress, ctx.Port));
+        EventRaiser.Raise(RawBytesSent, this, new RawBytesEventArgs(framed, ctx.RemoteAddress, ctx.Port), _logger);
     }
 
     /// <summary>Sends a legacy untyped telegram to a specific client identified by remote IP address and port.</summary>
@@ -133,7 +123,7 @@ public sealed partial class TcpPlcServer(
         var ctx = FindClient(remoteAddress, port);
         var framed = _framer.Frame(TelegramSerializer.Serialize(telegram, byteOrder));
         await ctx.SendAsync(framed, cancellationToken);
-        RawBytesSent?.Invoke(this, new RawBytesEventArgs(framed, ctx.RemoteAddress, ctx.Port));
+        EventRaiser.Raise(RawBytesSent, this, new RawBytesEventArgs(framed, ctx.RemoteAddress, ctx.Port), _logger);
     }
 
     /// <summary>Sends a strongly-typed telegram to a specific client.</summary>
@@ -141,18 +131,18 @@ public sealed partial class TcpPlcServer(
     {
         if (!_clients.TryGetValue(clientId, out var ctx))
             throw new KeyNotFoundException($"Client {clientId} not found.");
-        var framed = _framer.Frame(telegram.Serialize(byteOrder));
+        var framed = _framer.Frame(_dispatcher.Serialize(telegram));
         await ctx.SendAsync(framed, cancellationToken);
-        RawBytesSent?.Invoke(this, new RawBytesEventArgs(framed, ctx.RemoteAddress, ctx.Port));
+        EventRaiser.Raise(RawBytesSent, this, new RawBytesEventArgs(framed, ctx.RemoteAddress, ctx.Port), _logger);
     }
 
     /// <summary>Sends a strongly-typed telegram to a specific client identified by remote IP address and port.</summary>
     public async Task SendToAsync<T>(string remoteAddress, int port, T telegram, CancellationToken cancellationToken = default)where T : ITypedS7Telegram<T>
     {
         var ctx = FindClient(remoteAddress, port);
-        var framed = _framer.Frame(telegram.Serialize(byteOrder));
+        var framed = _framer.Frame(_dispatcher.Serialize(telegram));
         await ctx.SendAsync(framed, cancellationToken);
-        RawBytesSent?.Invoke(this, new RawBytesEventArgs(framed, ctx.RemoteAddress, ctx.Port));
+        EventRaiser.Raise(RawBytesSent, this, new RawBytesEventArgs(framed, ctx.RemoteAddress, ctx.Port), _logger);
     }
 
     private ClientContext FindClient(string remoteAddress, int port)
@@ -167,41 +157,27 @@ public sealed partial class TcpPlcServer(
     // ── Typed subscription ────────────────────────────────────────────────────
 
     /// <summary>
-    /// Subscribes to <see cref="TelegramReceived"/> and invokes <paramref name="handler"/>
-    /// whenever a payload whose MessageId matches <typeparamref name="T"/>.<c>MessageId</c> arrives.
-    /// Uses static abstract interface members — zero reflection.
+    /// Invokes <paramref name="handler"/> whenever a telegram of type <typeparamref name="T"/>
+    /// (as registered on this server's builder) arrives from any client. Handlers run independently
+    /// of <see cref="TelegramReceived"/>; an exception in one is logged and does not affect the other.
     /// </summary>
-    public IDisposable Subscribe<T>(Action<T> handler)where T : ITypedS7Telegram<T>
+    /// <returns>An <see cref="IDisposable"/> that unsubscribes when disposed.</returns>
+    /// <exception cref="InvalidOperationException"><typeparamref name="T"/> was not registered on the builder.</exception>
+    public IDisposable Subscribe<T>(Action<T> handler) where T : ITypedS7Telegram<T>
     {
-        EventHandler<TelegramReceivedEventArgs> listener = (_, e) =>
-        {
-            var def = T.Definition;
-            if (!MatchesMessageId(e.RawPayload, def)) return;
-            try   { handler(T.Deserialize(e.RawPayload, byteOrder)); }
-            catch (Exception ex) { LogTypedHandlerThrew(logger, ex, typeof(T).Name); }
-        };
-        TelegramReceived += listener;
-        return new Subscription(() => TelegramReceived -= listener);
+        ArgumentNullException.ThrowIfNull(handler);
+        return _dispatcher.Subscribe<T>((telegram, _, _) => handler(telegram));
     }
 
     /// <summary>
-    /// Subscribes to <see cref="TelegramReceived"/> and invokes <paramref name="handler"/>
-    /// whenever a payload whose MessageId matches <typeparamref name="T"/>.<c>MessageId</c> arrives.
+    /// Invokes <paramref name="handler"/> whenever a telegram of type <typeparamref name="T"/>
+    /// (as registered on this server's builder) arrives from any client.
     /// The handler receives the deserialised telegram plus the remote IP address and port.
-    /// Uses static abstract interface members — zero reflection.
     /// </summary>
-    public IDisposable Subscribe<T>(Action<T, string, int> handler)where T : ITypedS7Telegram<T>
-    {
-        EventHandler<TelegramReceivedEventArgs> listener = (_, e) =>
-        {
-            var def = T.Definition;
-            if (!MatchesMessageId(e.RawPayload, def)) return;
-            try   { handler(T.Deserialize(e.RawPayload, byteOrder), e.RemoteAddress, e.Port); }
-            catch (Exception ex) { LogTypedHandlerThrew(logger, ex, typeof(T).Name); }
-        };
-        TelegramReceived += listener;
-        return new Subscription(() => TelegramReceived -= listener);
-    }
+    /// <returns>An <see cref="IDisposable"/> that unsubscribes when disposed.</returns>
+    /// <exception cref="InvalidOperationException"><typeparamref name="T"/> was not registered on the builder.</exception>
+    public IDisposable Subscribe<T>(Action<T, string, int> handler) where T : ITypedS7Telegram<T>
+        => _dispatcher.Subscribe(handler);
 
     // ── Accept / receive loops ────────────────────────────────────────────────
 
@@ -212,7 +188,7 @@ public sealed partial class TcpPlcServer(
             TcpClient client;
             try { client = await _listener.AcceptTcpClientAsync(ct); }
             catch (OperationCanceledException) { break; }
-            catch (Exception ex) { LogAcceptError(logger, ex); break; }
+            catch (Exception ex) { LogAcceptError(_logger, ex); break; }
 
             // Apply low-latency socket options to each accepted connection.
             client.NoDelay = _config.NoDelay;
@@ -221,11 +197,11 @@ public sealed partial class TcpPlcServer(
 
             var ctx = new ClientContext(client, Guid.NewGuid());
             _clients[ctx.Id] = ctx;
-            LogClientConnected(logger, ctx.Id, client.Client.RemoteEndPoint);
+            LogClientConnected(_logger, ctx.Id, client.Client.RemoteEndPoint);
 
             // Run the per-client handler without awaiting, but ensure unhandled exceptions are logged.
             _ = HandleClientAsync(ctx, ct).ContinueWith(
-                t => LogUnhandledClientException(logger, t.Exception, ctx.Id),
+                t => LogUnhandledClientException(_logger, t.Exception, ctx.Id),
                 CancellationToken.None,
                 TaskContinuationOptions.OnlyOnFaulted,
                 TaskScheduler.Default);
@@ -235,7 +211,7 @@ public sealed partial class TcpPlcServer(
     private async Task HandleClientAsync(ClientContext ctx, CancellationToken ct)
     {
         var buffer      = new byte[65536];
-        var accumulated = new System.IO.MemoryStream();
+        var accumulator = new FrameAccumulator(_framer, _framer.MaxFrameSize + buffer.Length);
         try
         {
             while (!ct.IsCancellationRequested)
@@ -246,143 +222,30 @@ public sealed partial class TcpPlcServer(
                 if (bytesRead == 0) break;
                 // Only materialise a separate copy for the diagnostic event when someone is listening.
                 if (RawBytesReceived is { } rawReceived)
-                {
-                    var received = new byte[bytesRead];
-                    Array.Copy(buffer, received, bytesRead);
-                    rawReceived.Invoke(this, new RawBytesEventArgs(received, ctx.RemoteAddress, ctx.Port));
-                }
-                accumulated.Write(buffer, 0, bytesRead);
-                ProcessBuffer(accumulated, ctx);
+                    EventRaiser.Raise(rawReceived, this, new RawBytesEventArgs(buffer.AsSpan(0, bytesRead).ToArray(), ctx.RemoteAddress, ctx.Port), _logger);
+
+                accumulator.Append(buffer.AsSpan(0, bytesRead));
+                int discarded = accumulator.Drain(payload => DispatchTelegram(payload, ctx));
+                if (discarded > 0) LogUnrecognisedTelegramId(_logger, discarded);
             }
         }
         finally
         {
             _clients.TryRemove(ctx.Id, out _);
             ctx.Dispose();
-            LogClientDisconnected(logger, ctx.Id);
-        }
-    }
-
-    private void ProcessBuffer(System.IO.MemoryStream accumulated, ClientContext ctx)
-    {
-        while (true)
-        {
-            int dataLength = (int)accumulated.Length;
-            if (dataLength == 0) break;
-
-            // Use GetBuffer() to get a span over the internal array without allocating a copy.
-            byte[] rawBuffer = accumulated.GetBuffer();
-            var data = rawBuffer.AsSpan(0, dataLength);
-
-            if (!_framer.TryExtract(data, out var message, out int consumed))
-            {
-                if (consumed > 0)
-                {
-                    // Definite ID mismatch — discard unrecognised byte(s) and keep scanning.
-                    LogUnrecognisedTelegramId(logger, consumed);
-                    int rem = dataLength - consumed;
-                    if (rem > 0)
-                    {
-                        accumulated.Position = 0;
-                        accumulated.Write(rawBuffer, consumed, rem);
-                    }
-                    accumulated.SetLength(rem);
-                    continue;
-                }
-                break; // Insufficient data — wait for more bytes.
-            }
-
-            int remaining = dataLength - consumed;
-            var msgArray = message.ToArray();
-            if (remaining > 0)
-            {
-                accumulated.Position = 0;
-                accumulated.Write(rawBuffer, consumed, remaining);
-            }
-            accumulated.SetLength(remaining);
-
-            DispatchTelegram(msgArray, ctx);
+            LogClientDisconnected(_logger, ctx.Id);
         }
     }
 
     private void DispatchTelegram(byte[] payload, ClientContext ctx)
     {
-        // 1. MessageId-based dispatch — O(1) per (offset, type) group.
-        foreach (var (offset, type, lookup) in _idGroups)
+        var def = _dispatcher.Match(payload, ctx.Source);
+        if (def is null)
         {
-            int idSize = S7TypeConverter.GetWireSize(type);
-            if (payload.Length < offset + idSize) continue;
-            long id = TelegramIdFramer.ReadId(payload, offset, type, byteOrder);
-            if (!lookup.TryGetValue(id, out var def)) continue;
-
-            if (!ValidateLength(def, payload, ctx)) return;
-            TryDeserializeAndFire(def, payload, ctx);
+            EventRaiser.Raise(UnknownTelegramReceived, this, new UnknownTelegramEventArgs(payload, byteOrder), _logger);
             return;
         }
-
-        // 2. Size-based fallback — O(1) dictionary lookup.
-        if (_sizeIndex.TryGetValue(payload.Length, out var sizeDef))
-        {
-            if (!ValidateLength(sizeDef, payload, ctx)) return;
-            TryDeserializeAndFire(sizeDef, payload, ctx);
-            return;
-        }
-
-        // 3. No match — raise UnknownTelegramReceived
-        LogNoMatchingDefinitionFromClient(logger, payload.Length, ctx.Id);
-        UnknownTelegramReceived?.Invoke(this, new UnknownTelegramEventArgs(payload, byteOrder));
-    }
-
-    /// <summary>
-    /// Validates the embedded length field (if configured via
-    /// <c>.WithLength&lt;TType&gt;(length, byteOffset)</c>).
-    /// Returns <c>true</c> when valid (or when no length field is configured).
-    /// Returns <c>false</c> and raises <see cref="UnknownTelegramReceived"/> on mismatch.
-    /// </summary>
-    private bool ValidateLength(TelegramDefinition def, byte[] payload, ClientContext ctx)
-    {
-        if (def.LengthByteOffset < 0) return true;
-
-        int fieldEnd = def.LengthByteOffset + S7TypeConverter.GetWireSize(def.LengthDataType);
-        if (payload.Length < fieldEnd)
-        {
-            LogLengthFieldBeyondPayloadFromClient(logger, def.Id, ctx.Id, def.LengthByteOffset, payload.Length);
-            UnknownTelegramReceived?.Invoke(this, new UnknownTelegramEventArgs(payload, byteOrder));
-            return false;
-        }
-
-        long receivedLength = TelegramIdFramer.ReadLength(payload, def.LengthByteOffset, def.LengthDataType, byteOrder);
-        if (receivedLength != def.ConfiguredWireSize)
-        {
-            LogLengthFieldMismatchFromClient(logger, def.Id, ctx.Id, def.ConfiguredWireSize, receivedLength);
-            UnknownTelegramReceived?.Invoke(this, new UnknownTelegramEventArgs(payload, byteOrder));
-            return false;
-        }
-
-        return true;
-    }
-
-    private void TryDeserializeAndFire(TelegramDefinition def, byte[] payload, ClientContext ctx)
-    {
-        try
-        {
-            var telegram = TelegramSerializer.Deserialize(def, payload, byteOrder);
-            TelegramReceived?.Invoke(this, new TelegramReceivedEventArgs(telegram, payload, ctx.RemoteAddress, ctx.Port));
-        }
-        catch (Exception ex)
-        {
-            LogDeserializeFailedFromClient(logger, ex, def.Id, ctx.Id);
-        }
-    }
-
-    private bool MatchesMessageId(byte[] payload, TelegramDefinition def)
-    {
-        int idSize   = S7TypeConverter.GetWireSize(def.MessageIdDataType);
-        int minBytes = def.MessageIdByteOffset + idSize;
-        if (payload.Length < minBytes) return false;
-
-        long actual = TelegramIdFramer.ReadId(payload, def.MessageIdByteOffset, def.MessageIdDataType, byteOrder);
-        return actual == def.MessageId;
+        _dispatcher.Deliver(def, payload, ctx.RemoteAddress, ctx.Port, this, TelegramReceived);
     }
 
     public async ValueTask DisposeAsync()
@@ -404,6 +267,9 @@ public sealed partial class TcpPlcServer(
         public string RemoteAddress { get; }
         public int    Port          { get; }
         public NetworkStream Stream { get; }
+
+        /// <summary>Client description used in log messages.</summary>
+        public string Source => $"client {Id} ({RemoteAddress}:{Port})";
 
         public ClientContext(TcpClient client, Guid id)
         {
@@ -435,10 +301,5 @@ public sealed partial class TcpPlcServer(
             _writeLock.Dispose();
             try { _client.Dispose(); } catch { /* ignore */ }
         }
-    }
-
-    private sealed class Subscription(Action unsubscribe) : IDisposable
-    {
-        public void Dispose() => unsubscribe();
     }
 }

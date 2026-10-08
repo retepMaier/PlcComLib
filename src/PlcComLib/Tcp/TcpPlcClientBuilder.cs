@@ -22,6 +22,9 @@ public sealed class TcpPlcClientBuilder
     private readonly TelegramRegistry _registry = new();
     private ByteOrder _byteOrder = ByteOrder.BigEndian;
     private TelegramDefinition? _lastRegisteredDef;
+
+    /// <summary>The definitions registered so far (exposed for tests).</summary>
+    internal TelegramRegistry Registry => _registry;
     private bool _noDelay = false;
     private int _receiveBufferSize = 0;
     private int _sendBufferSize = 0;
@@ -109,8 +112,11 @@ public sealed class TcpPlcClientBuilder
     /// </summary>
     public TcpPlcClientBuilder RegisterTelegram<T>() where T : ITypedS7Telegram<T>
     {
-        _registry.Register(T.Definition);
-        _lastRegisteredDef = T.Definition;
+        // Register a private copy: WithMessageId/WithLength must not change the shared
+        // T.Definition, which other connections registering the same type also start from.
+        var definition = T.Definition.Clone();
+        _registry.Register(definition);
+        _lastRegisteredDef = definition;
         return this;
     }
 
@@ -175,18 +181,7 @@ public sealed class TcpPlcClientBuilder
 
         string propName = member.Member.Name;
 
-        int offset = 0;
-        bool found = false;
-        foreach (var field in _lastRegisteredDef.Fields)
-        {
-            if (field.Name == propName) { found = true; break; }
-            offset += field.WireSize;
-        }
-
-        if (!found)
-            throw new ArgumentException(
-                $"Property '{propName}' was not found in the definition for '{_lastRegisteredDef.Id}'.",
-                nameof(fieldSelector));
+        int offset = TelegramBuilderSupport.GetFieldOffset(_lastRegisteredDef, propName, nameof(fieldSelector));
 
         _lastRegisteredDef.MessageId           = id;
         _lastRegisteredDef.MessageIdByteOffset = offset;
@@ -212,7 +207,7 @@ public sealed class TcpPlcClientBuilder
     {
         if (_lastRegisteredDef is not null)
         {
-            _lastRegisteredDef.ConfiguredWireSize = (int)length;
+            _lastRegisteredDef.ConfiguredWireSize = TelegramBuilderSupport.CheckLength(_lastRegisteredDef, length);
             _lastRegisteredDef.LengthByteOffset   = byteOffset;
             _lastRegisteredDef.LengthDataType     = TType.DataType;
         }
@@ -245,20 +240,9 @@ public sealed class TcpPlcClientBuilder
 
         string propName = member.Member.Name;
 
-        int offset = 0;
-        bool found = false;
-        foreach (var field in _lastRegisteredDef.Fields)
-        {
-            if (field.Name == propName) { found = true; break; }
-            offset += field.WireSize;
-        }
+        int offset = TelegramBuilderSupport.GetFieldOffset(_lastRegisteredDef, propName, nameof(fieldSelector));
 
-        if (!found)
-            throw new ArgumentException(
-                $"Property '{propName}' was not found in the definition for '{_lastRegisteredDef.Id}'.",
-                nameof(fieldSelector));
-
-        _lastRegisteredDef.ConfiguredWireSize = (int)length;
+        _lastRegisteredDef.ConfiguredWireSize = TelegramBuilderSupport.CheckLength(_lastRegisteredDef, length);
         _lastRegisteredDef.LengthByteOffset   = offset;
         _lastRegisteredDef.LengthDataType     = TField.DataType;
         return this;

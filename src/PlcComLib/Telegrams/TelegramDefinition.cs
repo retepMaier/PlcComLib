@@ -80,4 +80,46 @@ public sealed class TelegramDefinition
     /// otherwise <see cref="TotalWireSize"/>.
     /// </summary>
     public int EffectiveWireSize => ConfiguredWireSize > 0 ? ConfiguredWireSize : TotalWireSize;
+
+    /// <summary>
+    /// PLC-aligned wire size of a definition built from an <see cref="S7TelegramBase{TSelf}"/> type
+    /// (even-byte alignment and bool packing applied). <c>0</c> for hand-crafted definitions, whose
+    /// fields are laid out back-to-back in declaration order.
+    /// </summary>
+    public int LayoutWireSize { get; init; }
+
+    /// <summary>
+    /// <c>true</c> when the fields use the PLC-aligned layout described by
+    /// <see cref="TelegramField.PlcOffset"/> and <see cref="TelegramField.BitIndex"/>.
+    /// </summary>
+    public bool UsesPlcLayout => LayoutWireSize > 0;
+
+    /// <summary>
+    /// Returns a deep copy of this definition. Builders register a copy of a typed telegram's
+    /// shared <c>T.Definition</c> so that per-connection settings (MessageId, length field, …)
+    /// never leak into other connections.
+    /// </summary>
+    public TelegramDefinition Clone() => new()
+    {
+        Id                  = Id,
+        Name                = Name,
+        Description         = Description,
+        MessageId           = MessageId,
+        MessageIdByteOffset = MessageIdByteOffset,
+        MessageIdDataType   = MessageIdDataType,
+        LengthByteOffset    = LengthByteOffset,
+        LengthDataType      = LengthDataType,
+        ConfiguredWireSize  = ConfiguredWireSize,
+        LayoutWireSize      = LayoutWireSize,
+        Fields = Fields.Select(static f => new TelegramField
+        {
+            Name            = f.Name,
+            DataType        = f.DataType,
+            MaxStringLength = f.MaxStringLength,
+            RawByteCount    = f.RawByteCount,
+            Description     = f.Description,
+            PlcOffset       = f.PlcOffset,
+            BitIndex        = f.BitIndex,
+        }).ToList(),
+    };
 }
